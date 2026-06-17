@@ -1,0 +1,50 @@
+{
+  "name": "sweet_bakery_uniapp",
+  "version": "1.0.0",
+  "description": "这是给 OpenClaw / AI 编码工具使用的 uni-app 项目骨架，用于根据原型图高保真还原微信小程序。",
+  "main": "main.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:mp-weixin": "NODE_OPTIONS=--openssl-legacy-provider NODE_ENV=production UNI_PLATFORM=mp-weixin UNI_INPUT_DIR=$PWD UNI_OUTPUT_DIR=$PWD/unpackage/dist/dev/mp-weixin UNI_CLI_CONTEXT=$PWD VUE_CLI_CONTEXT=$PWD UNI_HBUILDERX_PLUGINS=/Applications/HBuilderX.app/Contents/HBuilderX/plugins HX_Version=5.07 /Applications/HBuilderX.app/Contents/HBuilderX/plugins/node/node ./node_modules/@vue/cli-service/bin/vue-cli-service.js uni-build --no-clean",
+    "server": "node server/index.js",
+    "start:api": "node server/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@dcloudio/uni-app": "^2.0.2-5000720260410001",
+    "@dcloudio/uni-cli-i18n": "^2.0.2-5000720260410001",
+    "@dcloudio/uni-cli-shared": "^2.0.2-5000720260410001",
+    "@dcloudio/uni-i18n": "^2.0.2-5000720260410001",
+    "@dcloudio/uni-mp-vue": "^2.0.2-5000720260410001",
+    "@dcloudio/uni-mp-weixin": "^2.0.2-5000720260410001",
+    "@dcloudio/uni-template-compiler": "^2.0.2-5000720260410001",
+    "@dcloudio/uni-ui": "^1.5.12",
+    "@dcloudio/vue-cli-plugin-uni": "^2.0.2-5000720260410001",
+    "@dcloudio/webpack-uni-mp-loader": "^2.0.2-5000720260410001",
+    "@dcloudio/webpack-uni-pages-loader": "^2.0.2-5000720260410001",
+    "better-sqlite3": "^12.10.0",
+    "regenerator-runtime": "^0.14.1",
+    "vue": "^2.6.14",
+    "vue-template-compiler": "^2.6.14"
+  },
+  "devDependencies": {
+    "@vue/cli-plugin-babel": "^4.5.19",
+    "@vue/cli-service": "^4.5.19",
+    "cache-loader": "^4.1.0",
+    "copy-webpack-plugin": "^5.1.2",
+    "file-loader": "^4.3.0",
+    "mini-css-extract-plugin": "^0.9.0",
+    "postcss-comment": "^2.0.0",
+    "sass": "^1.43.4",
+    "thread-loader": "^2.1.3",
+    "url-loader": "^2.3.0",
+    "webpack": "^4.47.0"
+  }
+}

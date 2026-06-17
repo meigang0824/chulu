@@ -1,0 +1,248 @@
+$color-primary: #e84f5f;
+$color-primary-dark: #c93d4c;
+$color-primary-soft: #f06f7c;
+$color-primary-light: #fff1f2;
+$color-primary-pale: #fff7f7;
+
+$color-danger: #ff4d4f;
+$color-danger-light: #fff1f0;
+
+$color-orange: #c87932;
+$color-orange-dark: #9f5720;
+$color-orange-light: #fff4e8;
+$color-yellow: #d89b25;
+$color-yellow-light: #fff8e6;
+
+$color-green: #1f9d64;
+$color-green-dark: #157a4b;
+$color-green-light: #eaf7f0;
+$color-blue: #3578d4;
+$color-blue-light: #edf5ff;
+
+$color-bg: #f6f7f9;
+$color-bg-light: #fbfcfd;
+$color-bg-deep: #edf0f3;
+$color-card: #ffffff;
+$color-mask: rgba(20, 28, 38, 0.42);
+
+$color-text-main: #222832;
+$color-text-regular: #5f6875;
+$color-text-light: #8a93a0;
+$color-text-placeholder: #aeb6c1;
+$color-border: #dde3ea;
+$color-border-light: #edf1f5;
+$color-line: #edf1f5;
+
+$space-page: 24rpx;
+$space-card: 28rpx;
+$space-section: 24rpx;
+
+$font-xs: 22rpx;
+$font-sm: 24rpx;
+$font-base: 28rpx;
+$font-md: 30rpx;
+$font-lg: 34rpx;
+$font-xl: 40rpx;
+$font-xxl: 52rpx;
+$font-family-base: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+$font-weight-regular: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+$font-weight-heavy: 800;
+$line-height-tight: 1.2;
+$line-height-title: 1.28;
+$line-height-body: 1.5;
+$line-height-caption: 1.4;
+
+$radius-xs: 8rpx;
+$radius-sm: 12rpx;
+$radius-md: 16rpx;
+$radius-card: 16rpx;
+$radius-lg: 20rpx;
+$radius-xl: 24rpx;
+$radius-pill: 999rpx;
+
+$height-button-sm: 64rpx;
+$height-button: 88rpx;
+$height-button-lg: 104rpx;
+$height-input: 88rpx;
+$height-tabbar: 120rpx;
+
+$shadow-card: 0 6rpx 20rpx rgba(27, 39, 53, 0.06);
+$shadow-soft: 0 8rpx 20rpx rgba(232, 79, 95, 0.18);
+$shadow-pop: 0 16rpx 42rpx rgba(27, 39, 53, 0.12);
+$shadow-bottom: 0 -8rpx 24rpx rgba(27, 39, 53, 0.06);
+$shadow-bottom-sm: 0 -6rpx 16rpx rgba(27, 39, 53, 0.04);
+$shadow-btn: 0 8rpx 18rpx rgba(232, 79, 95, 0.16);
+$shadow-switch: 0 4rpx 12rpx rgba(27, 39, 53, 0.06);
+$shadow-footer: 0 -10rpx 28rpx rgba(27, 39, 53, 0.06);
+
+$gradient-page: linear-gradient(180deg, #f7f8fa 0%, #f4f6f8 100%);
+$gradient-primary: linear-gradient(90deg, #e84f5f 0%, #f06f7c 100%);
+$gradient-orange: linear-gradient(90deg, #d0863b 0%, #bd672a 100%);
+$gradient-cream: linear-gradient(135deg, #fff8ef 0%, #fff1e2 100%);
+$gradient-hero: linear-gradient(135deg, #ffffff 0%, #f6f8fb 56%, #fff2e5 100%);
+
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@mixin font-base {
+  font-family: $font-family-base;
+  letter-spacing: 0;
+  text-rendering: optimizeLegibility;
+}
+
+@mixin page-shell {
+  min-height: 100vh;
+  background: $gradient-page;
+  color: $color-text-main;
+  @include font-base;
+}
+
+@mixin card($padding: 0) {
+  background: $color-card;
+  border-radius: $radius-card;
+  border: 1rpx solid $color-border-light;
+  box-shadow: $shadow-card;
+  @if $padding != 0 {
+    padding: $padding;
+  }
+}
+
+@mixin hairline($position: bottom, $color: $color-line) {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    background: $color;
+
+    @if $position == bottom {
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 1rpx;
+    }
+
+    @if $position == top {
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 1rpx;
+    }
+  }
+}
+
+@mixin text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin multi-ellipsis($line: 2) {
+  display: -webkit-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: $line;
+  -webkit-box-orient: vertical;
+}
+
+@mixin text-display {
+  @include font-base;
+  font-size: $font-xxl;
+  font-weight: $font-weight-bold;
+  line-height: 1.12;
+  color: $color-text-main;
+}
+
+@mixin text-page-title {
+  @include font-base;
+  font-size: $font-xl;
+  font-weight: $font-weight-bold;
+  line-height: $line-height-tight;
+  color: $color-text-main;
+}
+
+@mixin text-card-title {
+  @include font-base;
+  font-size: $font-lg;
+  font-weight: $font-weight-bold;
+  line-height: $line-height-title;
+  color: $color-text-main;
+}
+
+@mixin text-body($weight: $font-weight-regular, $color: $color-text-regular) {
+  @include font-base;
+  font-size: $font-base;
+  font-weight: $weight;
+  line-height: $line-height-body;
+  color: $color;
+}
+
+@mixin text-body-strong {
+  @include text-body($font-weight-medium, $color-text-main);
+}
+
+@mixin text-caption($color: $color-text-light) {
+  @include font-base;
+  font-size: $font-sm;
+  font-weight: $font-weight-regular;
+  line-height: $line-height-caption;
+  color: $color;
+}
+
+@mixin text-helper($color: $color-text-light) {
+  @include font-base;
+  font-size: $font-xs;
+  font-weight: $font-weight-regular;
+  line-height: $line-height-caption;
+  color: $color;
+}
+
+@mixin text-price($size: 44rpx) {
+  @include font-base;
+  font-size: $size;
+  font-weight: $font-weight-bold;
+  line-height: 1;
+  color: $color-primary;
+}
+
+@mixin primary-button {
+  @include flex-center;
+  height: $height-button;
+  background: $gradient-primary;
+  color: #fff;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-soft;
+  @include font-base;
+  font-size: 32rpx;
+  font-weight: $font-weight-semibold;
+  border: none;
+}
+
+@mixin outline-button($color: $color-text-main) {
+  @include flex-center;
+  height: $height-button;
+  color: $color;
+  background: $color-card;
+  border: 1rpx solid $color-border;
+  border-radius: $radius-md;
+  box-shadow: none;
+  @include font-base;
+  font-size: 30rpx;
+  font-weight: $font-weight-medium;
+}
+
+@mixin safe-bottom($extra: 0rpx) {
+  padding-bottom: calc(#{$extra} + env(safe-area-inset-bottom));
+}

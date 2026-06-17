@@ -1,0 +1,26 @@
+{
+  "appid": "wxa7b8ae590c1373d2",
+  "projectname": "chulu-bakery",
+  "description": "初炉团购小程序",
+  "miniprogramRoot": "unpackage/dist/dev/mp-weixin/",
+  "cloudfunctionRoot": "cloudfunctions/",
+  "compileType": "miniprogram",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "newFeature": true,
+    "coverView": true,
+    "lazyloadPlaceholderEnable": true,
+    "useCompilerPlugins": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    },
+    "minifyWXML": true
+  },
+  "condition": {}
+}

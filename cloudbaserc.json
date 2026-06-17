@@ -1,0 +1,28 @@
+{
+  "envId": "aiwork-8g5erw9d885e24b4",
+  "region": "ap-shanghai",
+  "functionRoot": "cloudfunctions",
+  "functions": [
+    {
+      "name": "businessApi",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "handler": "index.main"
+    },
+    {
+      "name": "createOrder",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "handler": "index.main"
+    },
+    {
+      "name": "cancelOrder",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "handler": "index.main"
+    }
+  ]
+}

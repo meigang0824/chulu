@@ -1,0 +1,285 @@
+.page {
+  @include page-shell;
+  padding: 0 $space-page 140rpx;
+}
+
+.page--safe {
+  @include safe-bottom(140rpx);
+}
+
+.card {
+  @include card;
+}
+
+.section {
+  margin-top: $space-section;
+}
+
+.section__head {
+  @include flex-between;
+  margin-bottom: 20rpx;
+}
+
+.section__title {
+  @include text-card-title;
+}
+
+.section__desc {
+  @include text-caption;
+}
+
+.muted {
+  color: $color-text-light;
+}
+
+.price {
+  @include text-price(40rpx);
+}
+
+.origin-price {
+  color: $color-text-light;
+  text-decoration: line-through;
+}
+
+.primary-btn {
+  @include primary-button;
+}
+
+.secondary-btn {
+  @include outline-button;
+}
+
+.orange-btn {
+  @include flex-center;
+  height: $height-button;
+  color: #fff;
+  background: $gradient-orange;
+  border-radius: $radius-md;
+  box-shadow: 0 8rpx 18rpx rgba(192, 112, 42, 0.14);
+  @include font-base;
+  font-size: 30rpx;
+  font-weight: $font-weight-semibold;
+}
+
+.ghost-btn {
+  @include flex-center;
+  height: $height-button-sm;
+  padding: 0 28rpx;
+  color: $color-text-main;
+  background: #fff;
+  border: 1rpx solid $color-border;
+  border-radius: $radius-md;
+  box-shadow: none;
+  @include font-base;
+  font-size: 28rpx;
+}
+
+.icon-btn {
+  @include flex-center;
+  width: 72rpx;
+  height: 72rpx;
+  color: $color-text-main;
+  background: #fff;
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-md;
+  box-shadow: none;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40rpx;
+  padding: 0 14rpx;
+  color: $color-primary;
+  background: $color-primary-light;
+  border-radius: 8rpx;
+  @include font-base;
+  font-size: $font-xs;
+  font-weight: $font-weight-medium;
+  line-height: 1;
+}
+
+.tag--orange,
+.tag--pendingDelivery,
+.tag--normal {
+  color: $color-orange;
+  background: $color-orange-light;
+}
+
+.tag--green,
+.tag--completed,
+.tag--ready {
+  color: $color-green;
+  background: $color-green-light;
+}
+
+.tag--blue,
+.tag--delivering {
+  color: $color-blue;
+  background: $color-blue-light;
+}
+
+.tag--red,
+.tag--active,
+.tag--paid,
+.tag--priority {
+  color: $color-primary;
+  background: $color-primary-light;
+}
+
+.tag--solid {
+  color: #fff;
+  background: $color-primary;
+}
+
+.pill {
+  @include flex-center;
+  min-height: 56rpx;
+  padding: 0 24rpx;
+  color: $color-text-regular;
+  background: #fff;
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-md;
+  @include font-base;
+  font-size: 26rpx;
+}
+
+.pill--active {
+  color: $color-primary;
+  background: $color-primary-light;
+  border-color: rgba(232, 79, 95, 0.18);
+  font-weight: $font-weight-semibold;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  height: $height-input;
+  padding: 0 28rpx;
+  color: $color-text-placeholder;
+  background: #fff;
+  border: 1rpx solid $color-border;
+  border-radius: $radius-md;
+  @include text-body($font-weight-regular, $color-text-placeholder);
+  box-shadow: none;
+}
+
+.form-card {
+  @include card(28rpx);
+}
+
+.form-row {
+  @include flex-between;
+  min-height: 96rpx;
+  border-bottom: 1rpx solid $color-line;
+  @include text-body-strong;
+}
+
+.form-row:last-child {
+  border-bottom: none;
+}
+
+.form-label {
+  flex-shrink: 0;
+  font-weight: $font-weight-semibold;
+}
+
+.form-required {
+  color: $color-primary;
+}
+
+.form-placeholder {
+  color: $color-text-placeholder;
+  font-weight: $font-weight-regular;
+}
+
+.line-card {
+  @include flex-between;
+  min-height: 92rpx;
+  padding: 0 28rpx;
+  color: $color-text-main;
+  background: #fff;
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-card;
+  box-shadow: none;
+  @include text-body-strong;
+}
+
+.tip-bar {
+  display: flex;
+  align-items: center;
+  min-height: 64rpx;
+  padding: 0 24rpx;
+  color: $color-orange-dark;
+  background: $color-orange-light;
+  border: 1rpx solid #f1ddc6;
+  border-radius: $radius-md;
+  @include text-body($font-weight-medium, $color-orange-dark);
+}
+
+.bottom-action {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 20rpx 30rpx;
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1rpx solid $color-border-light;
+  box-shadow: $shadow-bottom-sm;
+  @include safe-bottom(20rpx);
+}
+
+.bottom-action__main {
+  flex: 1;
+  @include primary-button;
+}
+
+.bottom-action__side {
+  min-width: 150rpx;
+  @include outline-button;
+}
+
+.simple {
+  padding-top: 24rpx;
+}
+
+.simple__hero {
+  padding: 36rpx 32rpx;
+  background: $gradient-cream;
+}
+
+.simple__title {
+  @include text-page-title;
+  font-size: 42rpx;
+  line-height: 1.3;
+}
+
+.simple__desc {
+  margin-top: 16rpx;
+  color: $color-text-regular;
+  font-size: 28rpx;
+  line-height: 1.55;
+}
+
+.simple__todo {
+  margin-top: 24rpx;
+  padding: 30rpx;
+}
+
+.simple__todo-title {
+  color: $color-primary;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.simple__todo-text {
+  margin-top: 12rpx;
+  color: $color-text-regular;
+  font-size: 26rpx;
+  line-height: 1.6;
+}

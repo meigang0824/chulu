@@ -1,0 +1,237 @@
+{
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^uni-(.*)": "@dcloudio/uni-ui/lib/uni-$1/uni-$1.vue"
+    }
+  },
+  "pages": [
+    {
+      "path": "pages/home/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/auth/login/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/category/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/product/detail",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/order/list/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/order/confirm/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/order/success/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/order/detail/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/order/refund/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/store/about/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/address/list/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/address/edit/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/order/review/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+  "subpackages": [
+    {
+      "root": "pages/admin",
+      "name": "admin",
+      "pages": [
+        {
+          "path": "dashboard/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "create-group/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "banner-config/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "store-settings/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "settings/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "order-list/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "order-detail/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "product-manage/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "route-manage/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "stats/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "stock-summary/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "delivery-address/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "product-edit/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "group-list/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "group-detail/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "category-manage/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        }
+      ]
+    }
+  ],
+  "preloadRule": {
+    "pages/mine/index": {
+      "network": "wifi",
+      "packages": [
+        "admin"
+      ]
+    }
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "初炉",
+    "navigationBarBackgroundColor": "#FFF8F0",
+    "backgroundColor": "#FFF8F0"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#6B3A2B",
+    "selectedColor": "#FF4F66",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/category/index",
+        "text": "商品"
+      },
+      {
+        "pagePath": "pages/order/list/index",
+        "text": "订单"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的"
+      }
+    ]
+  }
+}
