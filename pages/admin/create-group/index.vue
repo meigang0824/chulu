@@ -11,7 +11,15 @@
         </view>
         <view class="field">
           <view class="field__label">截单时间 <text>*</text></view>
-          <view class="picker-line" @tap="pick('deadline')">{{ groupForm.deadline }}<text>〉</text></view>
+          <view class="deadline-pickers">
+            <picker mode="date" :value="groupForm.deadlineDate" :start="todayDate" @change="setDeadlineDate">
+              <view class="picker-line">{{ groupForm.deadlineDate }}<text>〉</text></view>
+            </picker>
+            <picker mode="time" :value="groupForm.deadlineTime" @change="setDeadlineTime">
+              <view class="picker-line">{{ groupForm.deadlineTime }}<text>〉</text></view>
+            </picker>
+          </view>
+          <view class="field__helper">{{ deadlineLabel }}</view>
         </view>
         <view class="field">
           <view class="field__label">发货时间 <text>*</text></view>
@@ -107,7 +115,7 @@
       <view>
         <text>{{ selectedCount }}</text> 款商品
         <text>{{ totalStock }}</text> 份库存
-        <view>{{ groupForm.deadline }} · {{ groupForm.deliveryTime }}</view>
+        <view>{{ deadlineLabel }} · {{ groupForm.deliveryTime }}</view>
       </view>
       <button :disabled="publishing" @tap="publishGroup">{{ publishing ? '发布中...' : '发布本场团' }}</button>
     </view>
@@ -121,6 +129,24 @@ import AdminTabBar from '@/components/AdminTabBar/AdminTabBar.vue'
 import { getProducts, getCategories, saveGroup, getShopConfig, getActiveGroups } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
+
+function pad2(value) {
+  return String(value).padStart(2, '0')
+}
+
+function dateValue(date = new Date()) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
+function defaultDeadlineDate() {
+  return dateValue(new Date())
+}
+
+function productKeys(item = {}) {
+  return [item.id, item._id, item.docId, item.productId]
+    .filter(Boolean)
+    .map(value => String(value))
+}
 
 export default {
   components: { CustomNavBar, AdminTabBar },
@@ -136,9 +162,11 @@ export default {
       productIdsInActiveGroups: [],
       showAllProducts: false,
       categoryOptions: [{ key: 'all', text: '全部' }],
+      todayDate: defaultDeadlineDate(),
       groupForm: {
         title: '明日新鲜烘焙团',
-        deadline: '今日 22:00 截单',
+        deadlineDate: defaultDeadlineDate(),
+        deadlineTime: '22:00',
         deliveryTime: '次日打包发货',
         deliveryRange: '快递发货 / 门店自提 / 同城配送'
       }
@@ -150,12 +178,12 @@ export default {
       return this.products.filter(item => {
         const inCategory = this.activeCategory === 'all' || item.categoryKey === this.activeCategory
         const inKeyword = !kw || String(item.name || '').toLowerCase().includes(kw) || String(item.desc || '').toLowerCase().includes(kw)
-        const notInActiveGroup = this.showAllProducts || !this.productIdsInActiveGroups.includes(item.id)
+        const notInActiveGroup = this.showAllProducts || !this.isProductInActiveGroup(item)
         return inCategory && inKeyword && notInActiveGroup
       })
     },
     excludedCount() {
-      return this.productIdsInActiveGroups.length
+      return this.products.filter(item => this.isProductInActiveGroup(item)).length
     },
     selectedCount() {
       return this.selectedItems.length
@@ -168,6 +196,20 @@ export default {
         return sum + Number(item.groupPrice || item.price || 0) * Number(item.groupStock || item.stock || 0)
       }, 0)
       return amount.toFixed(amount % 1 === 0 ? 0 : 1)
+    },
+    deadlineLabel() {
+      const target = new Date(`${this.groupForm.deadlineDate}T${this.groupForm.deadlineTime}:00`)
+      if (Number.isNaN(target.getTime())) return '请选择截单时间'
+      const today = dateValue(new Date())
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const targetDate = dateValue(target)
+      const dateLabel = targetDate === today
+        ? '今日'
+        : targetDate === dateValue(tomorrow)
+          ? '明日'
+          : `${target.getMonth() + 1}月${target.getDate()}日`
+      return `${dateLabel} ${this.groupForm.deadlineTime} 截单`
     }
   },
   methods: {
@@ -175,11 +217,16 @@ export default {
       const stock = Number(product.stock || product.totalStock || 30)
       return {
         ...product,
+        id: product.id || product.productId || product._id || product.docId,
+        productId: product.productId || product.id || product._id || product.docId,
         groupPrice: String(product.price || ''),
         groupStock: String(stock),
-        limit: String(product.limit || 5),
-        tag: product.tag || '明日配送'
+        limit: String(product.limit || 5)
       }
+    },
+    isProductInActiveGroup(product) {
+      const activeIds = this.productIdsInActiveGroups
+      return productKeys(product).some(key => activeIds.includes(key))
     },
     isSelected(id) {
       return this.selectedItems.some(item => item.id === id)
@@ -206,9 +253,14 @@ export default {
     clearSelected() {
       this.selectedItems = []
     },
+    setDeadlineDate(event) {
+      this.groupForm.deadlineDate = event.detail.value
+    },
+    setDeadlineTime(event) {
+      this.groupForm.deadlineTime = event.detail.value
+    },
     pick(key) {
       const map = {
-        deadline: ['今日 20:00 截单', '今日 22:00 截单', '明日 10:00 截单'],
         deliveryTime: ['次日打包发货', '48小时内发货', '指定日期统一发货'],
         deliveryRange: ['快递发货 / 门店自提 / 同城配送', '仅快递发货', '仅门店自提', '快递发货 + 门店自提']
       }
@@ -218,15 +270,13 @@ export default {
       })
     },
     buildDeadlineAt() {
-      const date = new Date()
-      const text = this.groupForm.deadline || ''
-      if (text.includes('明日')) date.setDate(date.getDate() + 1)
-      const match = text.match(/(\d{1,2}):(\d{2})/)
-      date.setHours(match ? Number(match[1]) : 22, match ? Number(match[2]) : 0, 0, 0)
+      const date = new Date(`${this.groupForm.deadlineDate}T${this.groupForm.deadlineTime}:00`)
       return date.toISOString()
     },
     validate() {
       if (!this.groupForm.title) return '请输入团名称'
+      if (!this.groupForm.deadlineDate || !this.groupForm.deadlineTime) return '请选择截单时间'
+      if (Number.isNaN(new Date(`${this.groupForm.deadlineDate}T${this.groupForm.deadlineTime}:00`).getTime())) return '截单时间无效'
       if (!this.selectedItems.length) return '请至少选择 1 款商品'
       const invalid = this.selectedItems.find(item => Number(item.groupPrice) <= 0 || Number(item.groupStock) <= 0 || Number(item.limit) <= 0)
       if (invalid) return `请检查「${invalid.name}」的价格、库存和限购`
@@ -242,7 +292,7 @@ export default {
       const confirmed = await new Promise(resolve => {
         uni.showModal({
           title: '发布确认',
-          content: `本场团将发布 ${this.selectedCount} 款商品，共 ${this.totalStock} 份库存，预计销售额 ￥${this.estimatedSales}。\n${this.groupForm.deadline}\n${this.groupForm.deliveryTime}`,
+          content: `本场团将发布 ${this.selectedCount} 款商品，共 ${this.totalStock} 份库存，预计销售额 ￥${this.estimatedSales}。\n${this.deadlineLabel}\n${this.groupForm.deliveryTime}`,
           confirmText: '确认发布',
           success: ({ confirm }) => resolve(confirm),
           fail: () => resolve(false)
@@ -253,7 +303,7 @@ export default {
       try {
         await saveGroup({
           title: this.groupForm.title,
-          deadline: this.groupForm.deadline,
+          deadline: this.deadlineLabel,
           deadlineAt: this.buildDeadlineAt(),
           deliveryTime: this.groupForm.deliveryTime,
           deliveryRange: this.groupForm.deliveryRange,
@@ -275,11 +325,10 @@ export default {
               stock: Number(item.groupStock),
               totalStock: Number(item.groupStock),
               limit: Number(item.limit),
-              tag: item.tag,
               priority: index < 3,
               status: 'active',
               sort: index + 1,
-              deadline: this.groupForm.deadline,
+              deadline: this.deadlineLabel,
               deadlineAt: this.buildDeadlineAt(),
               deliveryTime: this.groupForm.deliveryTime,
               deliveryRange: this.groupForm.deliveryRange,
@@ -307,13 +356,18 @@ export default {
         this.shop = shopConfig
         const activeProducts = (products || []).filter(item => item && item.id && item.status === 'active')
         this.products = activeProducts
-        // 获取所有进行中团购的商品ID
+        // 获取所有进行中团购的商品标识；历史数据可能混用 id/_id/docId/productId。
         const productIds = []
         const groupsArray = Array.isArray(activeGroups) ? activeGroups : []
         groupsArray.forEach(group => {
+          if (Array.isArray(group.productIds)) {
+            group.productIds.forEach(id => {
+              if (id) productIds.push(String(id))
+            })
+          }
           const groupProducts = Array.isArray(group.products) ? group.products : []
           groupProducts.forEach(p => {
-            if (p.id || p.productId) productIds.push(p.id || p.productId)
+            productIds.push(...productKeys(p))
           })
         })
         this.productIdsInActiveGroups = [...new Set(productIds)]
@@ -344,20 +398,24 @@ export default {
 .field__label text { color:$color-primary; }
 .field input,.picker-line { width:100%; height:56rpx; margin-top:10rpx; color:$color-text-main; font-size:26rpx; }
 .picker-line { display:flex; align-items:center; justify-content:space-between; }
+.deadline-pickers { display:grid; grid-template-columns:1fr 1fr; gap:14rpx; }
+.deadline-pickers picker { min-width:0; }
+.deadline-pickers .picker-line { box-sizing:border-box; padding:0 14rpx; background:#fff; border:1rpx solid $color-border-light; border-radius:$radius-pill; }
+.field__helper { margin-top:12rpx; color:$color-primary; font-size:24rpx; font-weight:$font-weight-bold; }
 .batch-actions { display:flex; gap:16rpx; margin-top:22rpx; }
-.batch-actions button { flex:1; height:74rpx; border-radius:$radius-md; color:$color-primary; background:$color-primary-light; border:1rpx solid rgba(232,79,95,.16); font-size:26rpx; font-weight:$font-weight-bold; line-height:74rpx; }
-.batch-actions button:first-child { color:#fff; background:$color-primary; border-color:$color-primary; }
-.search-box { display:flex; align-items:center; gap:12rpx; height:78rpx; padding:0 22rpx; background:$color-bg-light; border:1rpx solid $color-border-light; border-radius:$radius-md; }
+.batch-actions button { flex:1; height:74rpx; border-radius:$radius-pill; color:$color-primary; background:$color-primary-light; border:1rpx solid rgba(255,92,114,.18); font-size:26rpx; font-weight:$font-weight-bold; line-height:74rpx; }
+.batch-actions button:first-child { color:#fff; background:$gradient-primary; border-color:transparent; box-shadow:$shadow-btn; }
+.search-box { display:flex; align-items:center; gap:12rpx; height:78rpx; padding:0 22rpx; background:#fff; border:1rpx solid $color-border-light; border-radius:$radius-pill; }
 .search-box text { color:$color-primary; font-size:30rpx; }
 .search-box input { flex:1; height:100%; font-size:26rpx; }
 .category-scroll { margin-top:18rpx; white-space:nowrap; }
 .category-list { display:flex; gap:14rpx; }
-.category-chip { flex-shrink:0; padding:14rpx 24rpx; color:$color-text-regular; background:#fff; border:1rpx solid $color-border-light; border-radius:$radius-md; font-size:24rpx; }
-.category-chip.active { color:$color-primary; background:$color-primary-light; border-color:rgba(232,79,95,.18); font-weight:700; }
-.filter-toggle { display:flex; align-items:center; gap:12rpx; margin-top:16rpx; padding:12rpx 16rpx; background:$color-orange-light; border:1rpx solid #f1ddc6; border-radius:$radius-md; }
+.category-chip { flex-shrink:0; padding:14rpx 24rpx; color:$color-text-regular; background:#fff; border:1rpx solid $color-border-light; border-radius:$radius-pill; font-size:24rpx; }
+.category-chip.active { color:$color-primary; background:$color-primary-light; border-color:rgba(255,92,114,.20); font-weight:700; }
+.filter-toggle { display:flex; align-items:center; gap:12rpx; margin-top:16rpx; padding:12rpx 16rpx; background:$color-orange-light; border:1rpx solid rgba(200, 121, 50, 0.18); border-radius:$radius-pill; }
 .filter-toggle text { font-size:24rpx; color:$color-text-regular; }
 .section-head { display:flex; align-items:center; justify-content:space-between; gap:20rpx; }
-.pool-count { flex-shrink:0; padding:10rpx 18rpx; border-radius:$radius-md; font-size:24rpx; font-weight:$font-weight-bold; color:$color-primary; background:$color-primary-light; }
+.pool-count { flex-shrink:0; padding:10rpx 18rpx; border-radius:$radius-pill; font-size:24rpx; font-weight:$font-weight-bold; color:$color-primary; background:$color-primary-light; }
 .selected-scroll { margin-top:20rpx; white-space:nowrap; }
 .selected-list { display:inline-flex; gap:16rpx; }
 .selected-item { width:190rpx; padding:14rpx; background:$color-bg-light; border:1rpx solid $color-border-light; border-radius:$radius-card; }
@@ -368,15 +426,15 @@ export default {
 .state-card { margin-top:22rpx; padding:42rpx 24rpx; text-align:center; color:$color-text-light; background:$color-bg-light; border-radius:$radius-card; font-size:26rpx; }
 .pool-list { display:flex; flex-direction:column; gap:16rpx; margin-top:22rpx; }
 .pool-item { position:relative; display:flex; gap:18rpx; padding:16rpx; border:1rpx solid $color-border-light; border-radius:$radius-card; background:#fff; }
-.pool-item.selected { border-color:rgba(232,79,95,.42); background:$color-primary-pale; }
+.pool-item.selected { border-color:rgba(255,92,114,.42); background:$color-primary-pale; }
 .pool-item image { width:116rpx; height:116rpx; border-radius:$radius-card; }
 .pool-item__main { flex:1; min-width:0; }
 .pool-item__name { @include text-body-strong; font-size:28rpx; @include text-ellipsis; }
 .pool-item__desc { margin-top:8rpx; @include text-caption($color-text-light); @include text-ellipsis; }
 .pool-item__meta { display:flex; gap:18rpx; margin-top:12rpx; font-size:24rpx; color:$color-text-regular; }
 .pool-item__meta text:first-child { color:$color-primary; font-weight:$font-weight-bold; }
-.select-dot { @include flex-center; flex-shrink:0; width:46rpx; height:46rpx; color:#fff; background:$color-primary; border-radius:$radius-md; font-size:28rpx; font-weight:$font-weight-bold; }
-.summary-bar { position:fixed; left:0; right:0; bottom:calc(142rpx + env(safe-area-inset-bottom)); z-index:40; display:flex; align-items:center; gap:20rpx; padding:18rpx 24rpx; background:rgba(255,255,255,.98); box-shadow:$shadow-bottom-sm; border-top:1rpx solid $color-border-light; }
+.select-dot { @include flex-center; flex-shrink:0; width:46rpx; height:46rpx; color:#fff; background:$gradient-primary; border-radius:50%; font-size:28rpx; font-weight:$font-weight-bold; }
+.summary-bar { position:fixed; left:0; right:0; bottom:calc(142rpx + env(safe-area-inset-bottom)); z-index:40; display:flex; align-items:center; gap:20rpx; padding:18rpx 24rpx; background:rgba(255,253,249,.98); box-shadow:$shadow-bottom-sm; border-top:1rpx solid $color-border-light; }
 .summary-bar > view { flex:1; min-width:0; color:$color-text-main; font-size:26rpx; font-weight:$font-weight-bold; }
 .summary-bar > view > text { color:$color-primary; font-size:32rpx; margin-right:6rpx; }
 .summary-bar > view view { margin-top:6rpx; color:$color-text-light; font-size:22rpx; font-weight:$font-weight-regular; @include text-ellipsis; }

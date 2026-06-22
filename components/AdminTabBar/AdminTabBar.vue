@@ -8,7 +8,7 @@
       @tap="go(item)"
     >
       <view class="admin-tabbar__icon">
-        <AppIcon :name="item.icon" :size="42" :stroke-width="2.2" :color="item.key === active ? '#E84F5F' : '#8A93A0'" />
+        <AppIcon :name="item.icon" :size="42" :stroke-width="2.2" :color="item.key === active ? '#FF5C72' : '#9A7D70'" />
       </view>
       <text class="admin-tabbar__text">{{ item.text }}</text>
     </view>
@@ -26,6 +26,7 @@ export default {
   },
   data() {
     return {
+      navigating: false,
       tabs: [
         { key: 'dashboard', text: '工作台', icon: 'dashboard', url: '/pages/admin/dashboard/index' },
         { key: 'create', text: '开团', icon: 'plus', url: '/pages/admin/create-group/index' },
@@ -36,9 +37,24 @@ export default {
     }
   },
   methods: {
+    getCurrentPath() {
+      const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+      const current = pages && pages[pages.length - 1]
+      return current && current.route ? `/${current.route}` : ''
+    },
     go(item) {
-      if (item.key === this.active) return
-      uni.navigateTo({ url: item.url })
+      if (this.navigating) return
+      if (this.getCurrentPath() === item.url) return
+
+      this.navigating = true
+      uni.redirectTo({
+        url: item.url,
+        complete: () => {
+          setTimeout(() => {
+            this.navigating = false
+          }, 250)
+        }
+      })
     }
   }
 }
@@ -56,7 +72,7 @@ export default {
   display: flex;
   min-height: 136rpx;
   padding: 12rpx 12rpx calc(12rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.98);
+  background: rgba(255, 253, 249, 0.98);
   border: 1rpx solid $color-border-light;
   border-radius: $radius-xl $radius-xl 0 0;
   box-shadow: $shadow-bottom;
@@ -67,7 +83,7 @@ export default {
   min-width: 0;
   @include flex-center;
   flex-direction: column;
-  color: $color-text-main;
+  color: $color-text-light;
   @include font-base;
   border-radius: $radius-md;
   transition: all 0.12s ease;
@@ -93,7 +109,7 @@ export default {
 
 .admin-tabbar__item--active .admin-tabbar__icon {
   background: $color-primary-light;
-  box-shadow: none;
+  box-shadow: 0 6rpx 16rpx rgba(255, 92, 114, 0.10);
 }
 
 .admin-tabbar__item--active .admin-tabbar__text {

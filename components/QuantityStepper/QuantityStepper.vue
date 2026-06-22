@@ -56,11 +56,10 @@ export default {
 .stepper {
   display: flex;
   align-items: center;
+  gap: 10rpx;
   height: 64rpx;
-  overflow: hidden;
-  background: #fff;
-  border: 1rpx solid $color-border;
-  border-radius: $radius-md;
+  overflow: visible;
+  background: transparent;
 }
 
 .stepper--disabled {
@@ -69,31 +68,39 @@ export default {
 
 .stepper__btn {
   @include flex-center;
-  width: 64rpx;
-  height: 64rpx;
-  color: $color-text-light;
-  font-size: 36rpx;
-  font-weight: 500;
+  width: 56rpx;
+  height: 56rpx;
+  color: $color-primary;
+  font-size: 34rpx;
+  font-weight: 800;
+  line-height: 1;
+  background: #fff;
+  border: 1rpx solid rgba(255, 92, 114, 0.22);
+  border-radius: 50%;
+  box-shadow: 0 8rpx 18rpx rgba(255, 92, 114, 0.1);
 }
 
 .stepper__btn--plus {
-  color: #fff;
-  background: $color-primary;
-  border-radius: 50%;
+  color: $color-primary;
+  background: #fff;
+  box-shadow: 0 8rpx 18rpx rgba(255, 92, 114, 0.1);
 }
 
 .stepper__btn--disabled {
   color: $color-text-placeholder;
   background: $color-bg-deep;
+  border-color: $color-border-light;
+  box-shadow: none;
 }
 
 .stepper__btn--plus.stepper__btn--disabled {
-  color: #fff;
-  background: #f4bdc5;
+  color: $color-text-placeholder;
+  background: $color-bg-deep;
+  box-shadow: none;
 }
 
 .stepper__value {
-  width: 72rpx;
+  width: 52rpx;
   color: $color-text-main;
   font-size: 30rpx;
   font-weight: 700;

@@ -4,7 +4,7 @@
 
     <view class="intro card">
       <view class="intro__title">门店配置</view>
-      <view class="intro__desc">店铺信息、首页展示、分类和发货批次统一在这里维护。</view>
+      <view class="intro__desc">店铺信息、首页展示和分类统一在这里维护。</view>
     </view>
 
     <view class="settings-list">
@@ -66,14 +66,6 @@ export default {
           icon: 'grid',
           theme: 'green',
           url: '/pages/admin/category-manage/index'
-        },
-        {
-          key: 'route',
-          title: '发货批次',
-          desc: '按快递、自提、同城创建批次，方便分拣打包',
-          icon: 'route',
-          theme: 'purple',
-          url: '/pages/admin/route-manage/index'
         }
       ]
     }

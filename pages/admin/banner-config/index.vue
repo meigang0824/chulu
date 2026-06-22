@@ -16,18 +16,35 @@
         :circular="settings.circular"
         :interval="settings.interval"
         :duration="settings.duration"
+        :current="previewIndex"
+        @change="handlePreviewChange"
       >
         <swiper-item v-for="banner in activeBanners" :key="banner.id">
           <view class="preview__slide">
-            <view class="preview__copy">
-              <view>{{ banner.tag }}</view>
-              <text>{{ banner.title }}</text>
-              <text>{{ banner.highlight }}</text>
+            <view class="preview__media">
+              <image class="preview__image" :src="banner.image" mode="aspectFill" />
             </view>
-            <image :src="banner.image" mode="aspectFill" />
+            <view class="preview__copy">
+              <view class="preview__tag">{{ banner.tag || '新鲜烘焙 · 团购更划算' }}</view>
+              <view class="preview__text">
+                {{ banner.title || '每日新鲜烘焙' }}
+                <text>{{ banner.highlight || banner.subtitle || '一起团 更甜蜜' }}</text>
+              </view>
+              <view class="preview__features">
+                <view v-for="item in previewFeatures(banner)" :key="item">{{ item }}</view>
+              </view>
+            </view>
           </view>
         </swiper-item>
       </swiper>
+      <view v-if="settings.showDots && activeBanners.length > 1" class="preview__dots">
+        <text
+          v-for="(banner, index) in activeBanners"
+          :key="banner.id"
+          :class="{ 'is-active': index === previewIndex }"
+          @tap="setPreviewBanner(index)"
+        ></text>
+      </view>
     </view>
 
     <view class="settings card">
@@ -125,7 +142,7 @@
 <script>
 import AdminTabBar from '@/components/AdminTabBar/AdminTabBar.vue'
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
-import { getDefaultBannerConfig, saveBannerConfig } from '@/utils/bannerConfig'
+import { getActiveBanners, getDefaultBannerConfig, saveBannerConfig } from '@/utils/bannerConfig'
 import { IMAGE_OPTIONS, resolveImageUrl, uploadImageToCloud } from '@/utils/image'
 import { adminAction, getAdminProducts, getDisplayBannerConfigFromCloud } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
@@ -140,25 +157,36 @@ export default {
       banners: config.banners,
       imageOptions: IMAGE_OPTIONS,
       routeOptions: [{ label: '不跳转', value: '' }],
-      uploadingIndex: -1
+      uploadingIndex: -1,
+      previewIndex: 0
     }
   },
   computed: {
     activeBanners() {
-      const list = this.banners.filter(item => item.enabled).sort((a, b) => Number(a.sort) - Number(b.sort))
-      return list.length ? list : this.banners.slice(0, 1)
+      return getActiveBanners({ settings: this.settings, banners: this.banners })
     },
     activeCount() {
       return this.banners.filter(item => item.enabled).length
     }
   },
   methods: {
+    previewFeatures(banner) {
+      const features = banner && banner.features
+      return Array.isArray(features) && features.length ? features.slice(0, 4) : ['严选食材', '新鲜现做', '明日配送']
+    },
+    handlePreviewChange(event) {
+      this.previewIndex = event.detail.current || 0
+    },
+    setPreviewBanner(index) {
+      this.previewIndex = index
+    },
     setSetting(key, value) {
       const next = key === 'interval' || key === 'duration' ? Math.max(Number(value || 0), 100) : value
       this.$set(this.settings, key, next)
     },
     setBanner(index, key, value) {
       this.$set(this.banners[index], key, value)
+      if (this.previewIndex >= this.activeBanners.length) this.previewIndex = 0
     },
     setFeatures(index, value) {
       const features = String(value || '')
@@ -240,6 +268,7 @@ export default {
       }))
       this.settings = config.settings
       this.banners = banners
+      if (this.previewIndex >= this.activeBanners.length) this.previewIndex = 0
       this.banners.forEach(item => this.addImageOption(item.imageFileID || item.image))
       saveBannerConfig({ settings: this.settings, banners: this.banners })
     },
@@ -300,22 +329,30 @@ export default {
 .preview__head { @include flex-between; margin-bottom: 20rpx; }
 .preview__title { color: $color-text-main; font-size: 34rpx; font-weight: 800; }
 .preview__sub { margin-top: 8rpx; color: $color-text-light; font-size: 24rpx; }
-.preview__badge { padding: 10rpx 18rpx; color: $color-primary; background: $color-primary-light; border: 1rpx solid rgba(232,79,95,.16); border-radius: $radius-md; font-size: 24rpx; font-weight: 700; }
-.preview__swiper { height: 260rpx; overflow: hidden; border-radius: $radius-card; background: $color-bg-light; }
-.preview__slide { position: relative; height: 100%; overflow: hidden; }
-.preview__copy { position: relative; z-index: 2; width: 58%; padding: 32rpx 0 0 28rpx; }
-.preview__copy view { display: inline-flex; padding: 8rpx 16rpx; color: #fff; background: rgba(34, 40, 50, .72); border-radius: $radius-sm; font-size: 22rpx; }
-.preview__copy text { display: block; margin-top: 16rpx; color: $color-text-main; font-size: 34rpx; font-weight: 800; line-height: 1.1; }
-.preview__copy text + text { color: $color-primary; }
-.preview__slide image { position: absolute; right: 0; top: 0; width: 48%; height: 100%; }
+.preview__badge { padding: 10rpx 18rpx; color: $color-primary; background: $color-primary-light; border: 1rpx solid rgba(255,92,114,.18); border-radius: $radius-pill; font-size: 24rpx; font-weight: 700; }
+.preview__swiper { height: 338rpx; overflow: hidden; border-radius: $radius-xl; background: $color-bg-deep; }
+.preview__slide { position: relative; height: 100%; overflow: hidden; border-radius: $radius-xl; }
+.preview__slide::after { content: ''; position: absolute; left: 0; top: 0; z-index: 2; width: 68%; height: 100%; background: linear-gradient(90deg, rgba(24,22,20,.68) 0%, rgba(24,22,20,.38) 58%, rgba(24,22,20,0) 100%); pointer-events: none; }
+.preview__media { position: absolute; left: 0; top: 0; z-index: 1; width: 100%; height: 100%; }
+.preview__image { display: block; width: 100%; height: 100%; }
+.preview__copy { position: relative; z-index: 3; box-sizing: border-box; width: 54%; height: 100%; padding: 38rpx 26rpx 30rpx 30rpx; }
+.preview__tag { display: inline-flex; align-items: center; max-width: 100%; box-sizing: border-box; height: 40rpx; padding: 0 18rpx; color: #fff; background: rgba(255,255,255,.18); border: 1rpx solid rgba(255,255,255,.26); border-radius: $radius-pill; font-size: 20rpx; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview__text { margin-top: 18rpx; color: #fff; font-size: 34rpx; line-height: 1.18; font-weight: 900; word-break: break-all; }
+.preview__text text { display: block; margin-top: 10rpx; color: rgba(255,255,255,.92); font-size: 28rpx; line-height: 1.18; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview__features { display: flex; flex-wrap: nowrap; gap: 0; margin-top: 16rpx; padding: 8rpx 6rpx; background: rgba(255,255,255,.16); border: 1rpx solid rgba(255,255,255,.24); border-radius: $radius-pill; }
+.preview__features view { display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; height: 34rpx; padding: 0 6rpx; color: #fff; font-size: 18rpx; font-weight: 600; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.preview__features view + view { border-left: 1rpx solid rgba(255,255,255,.26); }
+.preview__dots { position: relative; z-index: 4; display: flex; justify-content: center; gap: 12rpx; height: 0; transform: translateY(-28rpx); }
+.preview__dots text { width: 22rpx; height: 8rpx; background: rgba(255,255,255,.9); border-radius: $radius-pill; transition: width .2s ease, background .2s ease; }
+.preview__dots text.is-active { width: 32rpx; background: $color-primary; }
 .settings { margin-top: 22rpx; padding: 8rpx 24rpx 24rpx; }
 .form-row { @include flex-between; min-height: 104rpx; border-bottom: 1rpx solid $color-border-light; }
 .form-row__label { color: $color-text-main; font-size: 30rpx; font-weight: 800; }
 .form-row__hint { margin-top: 8rpx; color: $color-text-light; font-size: 23rpx; }
 .number-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18rpx; margin-top: 24rpx; }
 label text { display: block; margin-bottom: 10rpx; color: $color-text-light; font-size: 23rpx; }
-input, .picker-text { min-height: 76rpx; padding: 0 18rpx; color: $color-text-main; background: $color-bg-light; border: 1rpx solid $color-border-light; border-radius: $radius-md; font-size: 26rpx; line-height: 76rpx; }
-.upload-inline { width: 100%; height: 70rpx; margin-top: 14rpx; color: $color-primary; background: $color-primary-light; border: 1rpx solid rgba(232,79,95,.16); border-radius: $radius-md; font-size: 25rpx; font-weight: 700; line-height: 70rpx; }
+input, .picker-text { min-height: 76rpx; padding: 0 18rpx; color: $color-text-main; background: #fff; border: 1rpx solid $color-border-light; border-radius: $radius-pill; font-size: 26rpx; line-height: 76rpx; }
+.upload-inline { width: 100%; height: 70rpx; margin-top: 14rpx; color: $color-primary; background: $color-primary-light; border: 1rpx solid rgba(255,92,114,.18); border-radius: $radius-pill; font-size: 25rpx; font-weight: 700; line-height: 70rpx; }
 .banner-card { margin-top: 22rpx; padding: 24rpx; }
 .banner-card__top { display: flex; align-items: center; gap: 18rpx; }
 .banner-card__top image { width: 126rpx; height: 96rpx; border-radius: $radius-card; }
@@ -325,7 +362,7 @@ input, .picker-text { min-height: 76rpx; padding: 0 18rpx; color: $color-text-ma
 .edit-grid { display: grid; grid-template-columns: 1fr; gap: 18rpx; margin-top: 24rpx; }
 .banner-card__actions { display: flex; gap: 18rpx; margin-top: 22rpx; }
 .banner-card__actions button { flex: 1; }
-.bottom-actions { position: fixed; left: 0; right: 0; bottom: calc(142rpx + env(safe-area-inset-bottom)); z-index: 41; display: flex; gap: 18rpx; padding: 18rpx 24rpx; background: rgba(255,255,255,.97); border-top: 1rpx solid $color-border-light; }
+.bottom-actions { position: fixed; left: 0; right: 0; bottom: calc(142rpx + env(safe-area-inset-bottom)); z-index: 41; display: flex; gap: 18rpx; padding: 18rpx 24rpx; background: rgba(255,253,249,.98); border-top: 1rpx solid $color-border-light; }
 .bottom-actions button { flex: 1; }
 button[disabled] { opacity: .45; }
 </style>

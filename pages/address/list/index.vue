@@ -170,7 +170,8 @@ export default {
   align-items: center;
   justify-content: space-between;
   gap: 20rpx;
-  padding: 12rpx 12rpx 0;
+  margin-top: 10rpx;
+  padding: 14rpx 16rpx 0;
 }
 
 .address-meta {
@@ -208,7 +209,7 @@ export default {
   margin: 0;
   padding: 0 24rpx;
   color: $color-text-main;
-  background: #fff;
+  background: $color-card;
   border: 1rpx solid rgba(123, 90, 77, 0.2);
   border-radius: $radius-pill;
   font-size: 26rpx;
@@ -222,7 +223,9 @@ export default {
 
 .empty {
   margin-top: 24rpx;
-  padding: 40rpx 32rpx;
+  padding: 48rpx 32rpx;
+  background: $gradient-cream;
+  border: 1rpx solid $color-border-light;
   text-align: center;
 }
 
@@ -252,5 +255,22 @@ export default {
   @include primary-button;
   width: 100%;
   margin: 0;
+}
+
+@media screen and (max-width: 430px) {
+  .address-actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10rpx;
+  }
+
+  .address-buttons {
+    width: 100%;
+  }
+
+  .ghost-btn {
+    flex: 1;
+    min-width: 0;
+  }
 }
 </style>

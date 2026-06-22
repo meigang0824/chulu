@@ -83,8 +83,10 @@ export default {
       list: []
     }
   },
-  onLoad() {
+  onLoad(query = {}) {
     if (!ensurePageAccess('/pages/admin/order-list/index', '需要店长权限')) return
+    const status = query.status || query.active
+    if (this.orderStatusTabs.some(tab => tab.key === status)) this.active = status
   },
   onShow() {
     if (!ensurePageAccess('/pages/admin/order-list/index', '需要店长权限')) return
@@ -125,6 +127,10 @@ export default {
     async updateStatus(order) {
       const target = this.list.find(item => item.id === order.id)
       if (!target) return
+      if (target.refundStatus === 'pending') {
+        this.viewOrder(target)
+        return
+      }
       if (target.status === 'completed') {
         uni.showToast({ title: '已为顾客创建复购提醒', icon: 'none' })
         return
@@ -169,9 +175,9 @@ export default {
   height: 64rpx;
   padding: 0 18rpx;
   color: $color-text-regular;
-  background: $color-bg-light;
+  background: #fff;
   border: 1rpx solid $color-border-light;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
   font-size: 26rpx;
   white-space: nowrap;
 }
@@ -179,7 +185,7 @@ export default {
 .category-tab.active {
   color: $color-primary;
   background: $color-primary-light;
-  border-color: rgba(232, 79, 95, 0.18);
+  border-color: rgba(255, 92, 114, 0.20);
   font-weight: 800;
 }
 
@@ -199,9 +205,9 @@ export default {
   align-items: center;
   height: 72rpx;
   padding: 0 24rpx;
-  background: $color-bg-light;
+  background: #fff;
   border: 1rpx solid $color-border-light;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
 }
 
 .search-card text {

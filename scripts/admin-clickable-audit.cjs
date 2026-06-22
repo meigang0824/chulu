@@ -142,15 +142,6 @@ async function cleanupCloudData() {
   } catch {}
 
   try {
-    const routes = invoke('listRoutes')
-    for (const route of routes || []) {
-      if (String(route.id || '').includes('codex_click') || String(route.name || '').startsWith(testPrefix)) {
-        try { invoke('deleteRoute', { id: route.id }) } catch {}
-      }
-    }
-  } catch {}
-
-  try {
     const orders = invoke('listOrders')
     for (const order of orders || []) {
       const address = order.address || {}
@@ -222,17 +213,6 @@ async function setupCloudData() {
       status: 'active',
       sort: 1
     }]
-  })
-
-  invoke('saveRouteConfig', {
-    id: ids.route,
-    name: `${testPrefix}预置批次`,
-    date: new Date().toISOString().slice(0, 10),
-    startTime: '09:00',
-    endTime: '12:00',
-    status: 'planned',
-    orderIds: [orderList.id],
-    sort: -10000000
   })
 
   return { groupId: group.id, orderList, orderDetail, orderDelivery, orderCompleted }
@@ -393,7 +373,6 @@ async function runUiAudit() {
       '/pages/admin/store-settings/index',
       '/pages/admin/banner-config/index',
       '/pages/admin/category-manage/index',
-      '/pages/admin/route-manage/index',
       '/pages/admin/stats/index',
       '/pages/admin/group-list/index',
       `/pages/admin/group-detail/index?id=${seed.groupId}`,
@@ -406,7 +385,7 @@ async function runUiAudit() {
       `/pages/admin/product-edit/index?id=${ids.productEdit}`
     ]
 
-    await test('店长端 16 个页面可直接打开', async () => {
+    await test('店长端 15 个页面可直接打开', async () => {
       for (const url of renderPages) {
         await open(miniProgram, url)
         await assertAt(miniProgram, url.split('?')[0], url)
@@ -415,7 +394,7 @@ async function runUiAudit() {
 
     await test('工作台按钮：切回用户端、快捷入口、商品管理入口', async () => {
       let page = await open(miniProgram, '/pages/admin/dashboard/index')
-      await tap(page, '.dashboard-hero__switch', '切回用户端')
+      await tap(page, '.portal-switch', '切回用户端')
       await assertAt(miniProgram, '/pages/home/index', '切回用户端')
       await miniProgram.callWxMethod('setStorageSync', 'app_portal_mode', 'admin')
 
@@ -432,7 +411,7 @@ async function runUiAudit() {
 
       page = await open(miniProgram, '/pages/admin/dashboard/index')
       await tap(page, '.section__head .link', '正在开团-查看全部', 0, 800)
-      await assertAt(miniProgram, '/pages/admin/product-manage/index', '正在开团-查看全部')
+      await assertAt(miniProgram, '/pages/admin/group-list/index', '正在开团-查看全部')
 
       page = await open(miniProgram, '/pages/admin/dashboard/index')
       await tapOptional(page, '.product-card__btn', '正在开团商品-管理', 0, 800)
@@ -456,12 +435,11 @@ async function runUiAudit() {
       }
     })
 
-    await test('配置中心入口：店铺、轮播、分类、发货批次', async () => {
+    await test('配置中心入口：店铺、轮播、分类', async () => {
       const targets = [
         '/pages/admin/store-settings/index',
         '/pages/admin/banner-config/index',
-        '/pages/admin/category-manage/index',
-        '/pages/admin/route-manage/index'
+        '/pages/admin/category-manage/index'
       ]
       for (let index = 0; index < targets.length; index += 1) {
         const page = await open(miniProgram, '/pages/admin/settings/index')
@@ -546,62 +524,6 @@ async function runUiAudit() {
       await waitForCloud('分类删除未写入云数据库', () => {
         const shop = invoke('getShopConfig')
         return !(shop.categories || []).some(item => item.key === ids.category) ? shop : null
-      })
-    })
-
-    await test('发货批次：新增弹窗、选订单、保存、编辑、删除', async () => {
-      const page = await open(miniProgram, '/pages/admin/route-manage/index', 1600)
-      await tap(page, '.toolbar__add', '新增批次入口')
-      await tap(page, '.route-modal__mask', '新增批次遮罩关闭')
-      await tap(page, '.toolbar__add', '新增批次入口-保存')
-      await setVmData(miniProgram, {
-        form: {
-          id: ids.routeUi,
-          name: `${testPrefix}UI批次`,
-          date: new Date().toISOString().slice(0, 10),
-          startTime: '13:00',
-          endTime: '15:00',
-          status: 'planned',
-          orderIds: []
-        }
-      })
-      await tapOptional(page, '.order-option', '发货批次绑定订单', 0)
-      await tap(page, '.route-modal__actions .primary-btn', '保存新增批次', 0, 1600)
-      await waitForCloud('新增批次未写入云数据库', () => {
-        const routes = invoke('listRoutes')
-        return (routes || []).some(item => item.id === ids.routeUi) ? routes : null
-      })
-      let data = await waitForData(page, d => (d.routes || []).some(item => item.id === ids.routeUi), '新增批次写入')
-      let routeIndex = data.routes.findIndex(item => item.id === ids.routeUi)
-      let buttons = await elements(page, '.route-card__actions button')
-      await buttons[routeIndex * 2].tap()
-      await page.waitFor(500)
-      await waitForData(page, d => d.showForm === true, '编辑批次弹窗打开')
-      await setVmData(miniProgram, {
-        form: {
-          id: ids.routeUi,
-          _id: ids.routeUi,
-          name: `${testPrefix}UI批次编辑`,
-          date: new Date().toISOString().slice(0, 10),
-          startTime: '13:30',
-          endTime: '15:30',
-          status: 'delivering',
-          orderIds: [seed.orderList.id]
-        }
-      })
-      await tap(page, '.route-modal__actions .primary-btn', '保存编辑批次', 0, 1600)
-      await waitForCloud('编辑批次未写入云数据库', () => {
-        const routes = invoke('listRoutes')
-        return (routes || []).some(item => item.id === ids.routeUi && item.name.includes('编辑')) ? routes : null
-      })
-      data = await waitForData(page, d => (d.routes || []).some(item => item.id === ids.routeUi && item.name.includes('编辑')), '编辑批次写入')
-      routeIndex = data.routes.findIndex(item => item.id === ids.routeUi)
-      buttons = await elements(page, '.route-card__actions button')
-      await buttons[routeIndex * 2 + 1].tap()
-      await page.waitFor(1400)
-      await waitForCloud('批次删除未写入云数据库', () => {
-        const routes = invoke('listRoutes')
-        return !(routes || []).some(item => item.id === ids.routeUi) ? routes : null
       })
     })
 

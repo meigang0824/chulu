@@ -172,8 +172,8 @@ export default {
   min-height: 58rpx;
   color: $color-primary;
   background: $color-primary-light;
-  border: 1rpx solid rgba(232,79,95,.14);
-  border-radius: $radius-md;
+  border: 1rpx solid rgba(255,92,114,.16);
+  border-radius: $radius-pill;
   font-size: 24rpx;
   font-weight: 700;
 }
@@ -225,7 +225,7 @@ export default {
   display: flex;
   gap: 20rpx;
   padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.98);
+  background: rgba(255, 253, 249, 0.98);
   border-top: 1rpx solid $color-border-light;
   box-shadow: $shadow-bottom;
 }
@@ -236,7 +236,7 @@ export default {
   flex: 1;
   height: 88rpx;
   margin: 0;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
   font-size: 30rpx;
   font-weight: 700;
 }

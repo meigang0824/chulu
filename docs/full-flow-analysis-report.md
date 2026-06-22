@@ -91,7 +91,6 @@
 | 发货清单 | pages/admin/delivery-address | 发货地址汇总 | getDeliveryAddresses | ✅ |
 | 店铺设置 | pages/admin/store-settings | 店铺配置 | saveShopConfig | ✅ |
 | Banner配置 | pages/admin/banner-config | Banner管理 | ⚠️ 缺API | ❌ |
-| 路线管理 | pages/admin/route-manage | 发货批次 | ⚠️ 需验证 | ⚠️ |
 
 ---
 

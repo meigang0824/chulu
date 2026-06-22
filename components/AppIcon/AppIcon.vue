@@ -17,6 +17,8 @@ const iconMap = {
   info: 'info-filled',
   search: 'search',
   truck: 'cart-filled',
+  cart: 'cart-filled',
+  heart: 'heart-filled',
   users: 'personadd-filled',
   chart: 'fire-filled',
   route: 'map-filled',
@@ -27,7 +29,9 @@ const iconMap = {
   'add-group': 'plus-filled',
   'order-list': 'checkbox-filled',
   stock: 'gift-filled',
-  delivery: 'cart-filled'
+  delivery: 'cart-filled',
+  close: 'closeempty',
+  'chevron-right': 'right'
 }
 
 export default {

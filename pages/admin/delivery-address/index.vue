@@ -18,20 +18,6 @@
         </view>
       </scroll-view>
 
-      <scroll-view scroll-x class="fulfillment-scroll" show-scrollbar="false" style="margin-top:14rpx;">
-        <view class="fulfillment-tabs">
-          <view
-            v-for="method in fulfillmentMethods"
-            :key="method.key"
-            class="fulfillment-tab"
-            :class="{ active: fulfillmentFilter === method.key }"
-            @tap="fulfillmentFilter = method.key"
-          >
-            {{ method.text }}
-          </view>
-        </view>
-      </scroll-view>
-
       <view class="search-card" style="margin-top:18rpx;">
         <text>⌕</text>
         <input
@@ -46,7 +32,7 @@
     <EmptyState
       v-if="!filteredOrders.length"
       title="当前筛选下没有发货单"
-      desc="可以切换状态或履约方式，或者稍后再看看。"
+      desc="可以切换状态筛选，或者稍后再看看。"
       action-text="恢复全部"
       @action="resetFilters"
     />
@@ -59,6 +45,7 @@
         variant="delivery"
         selectable
         show-actions
+        :show-fulfillment="false"
         :checked="selectedIds.includes(item.id)"
         @select="toggle"
         @navigate="navigate"
@@ -71,7 +58,7 @@
       <view>全选</view>
       <view class="selected">已选 {{ selectedIds.length }} 单</view>
       <button class="export" @tap="exportAddress">导出快递单</button>
-      <button class="done" @tap="markDone">标记已发货</button>
+      <button class="done" @tap="markDone">{{ batchActionText }}</button>
     </view>
     <AdminTabBar active="delivery" />
   </view>
@@ -93,14 +80,7 @@ export default {
     return {
       shop: {},
       deliveryTabs: [],
-      fulfillmentMethods: [
-        { key: 'all', text: '全部履约' },
-        { key: '快递发货', text: '快递发货' },
-        { key: '门店自提', text: '门店自提' },
-        { key: '同城配送', text: '同城配送' }
-      ],
       active: 'all',
-      fulfillmentFilter: 'all',
       keyword: '',
       sortAsc: true,
       selectedIds: [],
@@ -119,14 +99,22 @@ export default {
       const keyword = this.keyword.trim()
       const list = this.list.filter(item => {
         const statusOk = this.active === 'all' || item.status === this.active
-        const fulfillmentOk = this.fulfillmentFilter === 'all' || item.fulfillmentMethod === this.fulfillmentFilter
         const keywordOk = !keyword || [item.receiver, item.customer, item.phone, item.address].join(' ').includes(keyword)
-        return statusOk && fulfillmentOk && keywordOk
+        return statusOk && keywordOk
       })
       return list.sort((a, b) => this.sortAsc ? a.routeNo - b.routeNo : b.routeNo - a.routeNo)
     },
     allSelected() {
       return this.filteredOrders.length > 0 && this.filteredOrders.every(item => this.selectedIds.includes(item.id))
+    },
+    selectedOrders() {
+      return this.list.filter(item => this.selectedIds.includes(item.id))
+    },
+    batchActionText() {
+      return this.active === 'delivering' ? '标记已完成' : '标记已发货'
+    },
+    batchTargetStatus() {
+      return this.active === 'delivering' ? 'completed' : 'delivering'
     }
   },
   methods: {
@@ -138,7 +126,6 @@ export default {
     },
     resetFilters() {
       this.active = 'all'
-      this.fulfillmentFilter = 'all'
       this.keyword = ''
     },
     toggle(order) {
@@ -193,11 +180,20 @@ export default {
         uni.showToast({ title: '请先勾选订单', icon: 'none' })
         return
       }
+      const targetStatus = this.batchTargetStatus
+      const actionable = this.selectedOrders.filter(item => {
+        if (targetStatus === 'completed') return item.status === 'delivering'
+        return ['paid', 'pendingDelivery'].includes(item.status)
+      })
+      if (!actionable.length) {
+        uni.showToast({ title: targetStatus === 'completed' ? '请选择已发货订单' : '请选择待发货订单', icon: 'none' })
+        return
+      }
       try {
-        await Promise.all(this.selectedIds.map(id => updateOrderStatus(id, 'completed')))
+        await Promise.all(actionable.map(item => updateOrderStatus(item.id, targetStatus)))
         this.selectedIds = []
         await this.loadDeliveryData()
-        uni.showToast({ title: '已批量完成', icon: 'success' })
+        uni.showToast({ title: targetStatus === 'completed' ? '已标记完成' : '已标记发货', icon: 'success' })
       } catch (error) {
         showCloudError(error)
       }
@@ -216,7 +212,7 @@ export default {
   padding: 18rpx;
 }
 
-.status-scroll, .fulfillment-scroll {
+.status-scroll {
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
 }
@@ -243,7 +239,7 @@ export default {
 .category-tab.active {
   color: $color-primary;
   background: $color-primary-light;
-  border-color: rgba(232, 79, 95, 0.18);
+  border-color: rgba(255, 92, 114, 0.20);
   font-weight: 800;
 }
 
@@ -251,32 +247,6 @@ export default {
   margin-left: 8rpx;
   font-size: 20rpx;
   opacity: 0.8;
-}
-
-.fulfillment-tabs {
-  display: inline-flex;
-  gap: 12rpx;
-}
-
-.fulfillment-tab {
-  @include flex-center;
-  flex: 0 0 auto;
-  min-width: 100rpx;
-  height: 56rpx;
-  padding: 0 16rpx;
-  color: $color-text-light;
-  background: $color-bg-light;
-  border: 1rpx solid $color-border-light;
-  border-radius: $radius-md;
-  font-size: 24rpx;
-  white-space: nowrap;
-}
-
-.fulfillment-tab.active {
-  color: $color-orange;
-  background: $color-orange-light;
-  border-color: #f1ddc6;
-  font-weight: 700;
 }
 
 .search-card {

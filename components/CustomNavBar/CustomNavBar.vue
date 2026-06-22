@@ -135,7 +135,7 @@ export default {
   position: sticky;
   top: 0;
   z-index: 30;
-  background: rgba(246, 247, 249, 0.98);
+  background: rgba(255, 248, 239, 0.98);
   padding-top: 44px;
   padding-bottom: 10rpx;
 }
@@ -177,9 +177,9 @@ export default {
   align-items: center;
   height: 68rpx;
   padding: 0 22rpx;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 253, 249, 0.96);
   border: 1rpx solid $color-border;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
   box-shadow: none;
 }
 
@@ -217,7 +217,7 @@ export default {
   width: 72rpx;
   height: 72rpx;
   margin-right: 18rpx;
-  border-radius: $radius-md;
+  border-radius: 20rpx;
 }
 
 .nav__brand-text { min-width: 0; }
@@ -247,10 +247,10 @@ export default {
   justify-content: center;
   width: 152rpx;
   height: 68rpx;
-  color: #222;
-  background: rgba(255, 255, 255, 0.92);
+  color: $color-text-main;
+  background: rgba(255, 253, 249, 0.94);
   border: 1rpx solid $color-border;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
   box-shadow: none;
 }
 

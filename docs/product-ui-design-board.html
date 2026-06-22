@@ -1,0 +1,1660 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>初炉小程序 UI 界面设计图合集</title>
+  <style>
+    :root {
+      --primary: #e84f5f;
+      --primary-dark: #c93d4c;
+      --primary-soft: #f06f7c;
+      --primary-light: #fff1f2;
+      --primary-pale: #fff7f7;
+      --orange: #c87932;
+      --orange-light: #fff4e8;
+      --green: #1f9d64;
+      --green-light: #eaf7f0;
+      --blue: #3578d4;
+      --blue-light: #edf5ff;
+      --danger: #ff4d4f;
+      --danger-light: #fff1f0;
+      --bg: #f6f7f9;
+      --bg-light: #fbfcfd;
+      --bg-deep: #edf0f3;
+      --card: #fff;
+      --text-main: #222832;
+      --text-regular: #5f6875;
+      --text-light: #8a93a0;
+      --border: #dde3ea;
+      --border-light: #edf1f5;
+      --shadow-card: 0 3px 10px rgba(27, 39, 53, .06);
+      --shadow-pop: 0 8px 24px rgba(27, 39, 53, .14);
+      --shadow-bottom: 0 -4px 14px rgba(27, 39, 53, .06);
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-card: 8px;
+      --radius-lg: 10px;
+      --radius-xl: 12px;
+      --radius-pill: 999px;
+      --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text-main);
+      background: #eef1f5;
+      font-family: var(--font);
+      letter-spacing: 0;
+    }
+    .board {
+      max-width: 1880px;
+      margin: 0 auto;
+      padding: 36px 28px 64px;
+    }
+    .board-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+    .eyebrow {
+      margin-bottom: 10px;
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 800;
+    }
+    h1 {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+    .board-head p {
+      max-width: 760px;
+      margin: 12px 0 0;
+      color: var(--text-regular);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    .token-strip {
+      display: grid;
+      grid-template-columns: repeat(8, 26px);
+      gap: 8px;
+      padding: 12px;
+      background: #fff;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-card);
+    }
+    .swatch {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      border: 1px solid rgba(34, 40, 50, .08);
+    }
+    .section-title {
+      margin: 34px 0 16px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .section-title h2 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+    .section-title span {
+      color: var(--text-light);
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(390px, 1fr));
+      gap: 28px;
+      align-items: start;
+    }
+    .mock {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .mock-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-regular);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .mock-title small {
+      color: var(--text-light);
+      font-weight: 500;
+    }
+    .phone {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #f7f8fa 0%, #f4f6f8 100%);
+      border: 1px solid #dce2e9;
+      border-radius: 28px;
+      box-shadow: 0 18px 45px rgba(26, 38, 52, .16);
+    }
+    .phone::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      z-index: 50;
+      width: 150px;
+      height: 30px;
+      transform: translateX(-50%);
+      background: #111;
+      border-radius: 0 0 18px 18px;
+    }
+    .status {
+      height: 44px;
+      padding: 12px 14px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #111;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .capsule {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 30px;
+      padding: 0 10px;
+      background: rgba(255,255,255,.92);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      font-weight: 800;
+    }
+    .screen {
+      height: calc(100% - 44px);
+      overflow: hidden;
+      padding: 0 12px 150px;
+    }
+    .nav {
+      min-height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 10px;
+    }
+    .logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: var(--orange-light);
+    }
+    .brand-name {
+      font-size: 16px;
+      font-weight: 900;
+      line-height: 1.1;
+    }
+    .brand-sub {
+      margin-top: 3px;
+      color: var(--text-light);
+      font-size: 11px;
+      line-height: 1;
+    }
+    .back {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      color: var(--text-main);
+      font-size: 28px;
+      line-height: 1;
+    }
+    .title-nav {
+      flex: 1;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 900;
+    }
+    .search {
+      flex: 1;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      color: var(--text-light);
+      background: #fff;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow-card);
+    }
+    .hero {
+      position: relative;
+      height: 169px;
+      overflow: hidden;
+      border-radius: var(--radius-xl);
+      background: #222;
+      box-shadow: var(--shadow-card);
+    }
+    .hero img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 68%;
+      background: linear-gradient(90deg, rgba(24,22,20,.72), rgba(24,22,20,.38) 58%, rgba(24,22,20,0));
+    }
+    .hero-copy {
+      position: absolute;
+      z-index: 2;
+      left: 16px;
+      top: 19px;
+      width: 54%;
+      color: #fff;
+    }
+    .tag-light {
+      display: inline-flex;
+      align-items: center;
+      height: 20px;
+      max-width: 100%;
+      padding: 0 9px;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.26);
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .hero h3 {
+      margin: 10px 0 0;
+      font-size: 18px;
+      line-height: 1.16;
+    }
+    .hero h3 span {
+      display: block;
+      margin-top: 5px;
+      color: rgba(255,255,255,.92);
+      font-size: 14px;
+    }
+    .feature-row {
+      display: flex;
+      margin-top: 10px;
+      padding: 5px 3px;
+      background: rgba(255,255,255,.16);
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 8px;
+    }
+    .feature-row span {
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+      font-size: 9px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .feature-row span + span { border-left: 1px solid rgba(255,255,255,.25); }
+    .dots {
+      position: absolute;
+      left: 50%;
+      bottom: 8px;
+      z-index: 3;
+      display: flex;
+      gap: 6px;
+      transform: translateX(-50%);
+    }
+    .dots i {
+      width: 11px;
+      height: 4px;
+      border-radius: var(--radius-pill);
+      background: rgba(255,255,255,.9);
+    }
+    .dots i.active {
+      width: 16px;
+      background: var(--primary);
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .section-head h3 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.1;
+    }
+    .section-head p {
+      margin: 4px 0 0;
+      color: var(--text-light);
+      font-size: 11px;
+    }
+    .link {
+      color: var(--text-light);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 9px;
+      color: var(--primary);
+      background: var(--primary-light);
+      border: 1px solid rgba(232,79,95,.16);
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .product-strip {
+      display: flex;
+      gap: 10px;
+      overflow: hidden;
+    }
+    .product-card {
+      flex: 0 0 112px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      box-shadow: var(--shadow-card);
+    }
+    .product-card img {
+      display: block;
+      width: 100%;
+      height: 78px;
+      object-fit: cover;
+      background: var(--bg-deep);
+    }
+    .product-body { padding: 7px; }
+    .product-name {
+      min-height: 16px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .meta {
+      margin-top: 5px;
+      color: var(--text-light);
+      font-size: 9px;
+      line-height: 1.25;
+    }
+    .price {
+      margin-top: 5px;
+      color: var(--primary);
+      font-size: 17px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .small-btn {
+      height: 23px;
+      margin-top: 6px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(90deg, var(--primary), var(--primary-soft));
+      border-radius: 7px;
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .more-card {
+      flex: 0 0 72px;
+      min-height: 158px;
+      display: grid;
+      place-items: center;
+      color: var(--primary);
+      background: var(--primary-light);
+      border: 1px solid rgba(232,79,95,.16);
+      border-radius: 8px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .more-card span {
+      display: block;
+      margin-top: 5px;
+      color: var(--text-light);
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .module {
+      margin-top: 12px;
+      padding: 14px 10px;
+    }
+    .activity-list {
+      display: flex;
+      gap: 8px;
+      overflow: hidden;
+    }
+    .activity-item {
+      flex: 0 0 122px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px;
+      background: var(--bg-light);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+    }
+    .avatar {
+      width: 27px;
+      height: 27px;
+      display: grid;
+      place-items: center;
+      color: var(--primary);
+      background: var(--primary-light);
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+    .activity-item b {
+      display: block;
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .activity-item small {
+      display: block;
+      margin-top: 2px;
+      color: var(--text-light);
+      font-size: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tabbar {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      bottom: 0;
+      z-index: 20;
+      min-height: 78px;
+      display: flex;
+      padding: 8px 6px 14px;
+      background: rgba(255,255,255,.98);
+      border: 1px solid var(--border-light);
+      border-radius: 12px 12px 0 0;
+      box-shadow: var(--shadow-bottom);
+    }
+    .tab {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      color: var(--text-light);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .tab i {
+      width: 33px;
+      height: 33px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      font-style: normal;
+      font-size: 16px;
+    }
+    .tab.active { color: var(--primary); }
+    .tab.active i { background: var(--primary-light); }
+    .filters {
+      display: flex;
+      gap: 8px;
+      overflow: hidden;
+      margin: 8px 0 12px;
+    }
+    .filter {
+      flex: 0 0 auto;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      padding: 0 14px;
+      color: var(--text-regular);
+      background: #fff;
+      border: 1px solid var(--border-light);
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .filter.active {
+      color: var(--primary);
+      background: var(--primary-light);
+      border-color: rgba(232,79,95,.18);
+    }
+    .list-tools {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      color: var(--text-light);
+      font-size: 12px;
+    }
+    .product-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .product-list .product-card {
+      flex: initial;
+      width: auto;
+    }
+    .product-list .product-card img { height: 112px; }
+    .order-tabs, .admin-tabs {
+      display: flex;
+      gap: 8px;
+      margin: 8px 0 12px;
+      overflow: hidden;
+    }
+    .order-tab {
+      flex: 1;
+      min-width: 0;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      color: var(--text-regular);
+      background: #fff;
+      border: 1px solid var(--border-light);
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .order-tab.active {
+      color: var(--primary);
+      background: var(--primary-light);
+      border-color: rgba(232,79,95,.18);
+    }
+    .order-card {
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .order-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .order-no {
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .status-tag {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 9px;
+      border-radius: 6px;
+      color: var(--primary);
+      background: var(--primary-light);
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .status-tag.blue { color: var(--blue); background: var(--blue-light); }
+    .status-tag.green { color: var(--green); background: var(--green-light); }
+    .status-tag.gray { color: var(--text-light); background: var(--bg-deep); }
+    .order-goods {
+      display: flex;
+      gap: 10px;
+      padding: 10px 0;
+    }
+    .order-goods img {
+      width: 54px;
+      height: 54px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: var(--bg-deep);
+    }
+    .order-goods h4 {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+    .order-goods p {
+      margin: 5px 0 0;
+      color: var(--text-light);
+      font-size: 11px;
+    }
+    .order-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .outline-btn, .primary-btn, .danger-btn, .wechat-btn {
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .outline-btn {
+      color: var(--text-main);
+      background: #fff;
+      border: 1px solid var(--border);
+    }
+    .primary-btn {
+      color: #fff;
+      background: linear-gradient(90deg, var(--primary), var(--primary-soft));
+      box-shadow: 0 4px 9px rgba(232,79,95,.16);
+    }
+    .danger-btn {
+      color: var(--danger);
+      background: var(--danger-light);
+      border: 1px solid rgba(255,77,79,.16);
+    }
+    .wechat-btn {
+      color: #fff;
+      background: linear-gradient(135deg, #18c85c, #07b84f);
+      box-shadow: 0 7px 14px rgba(7,184,79,.22);
+    }
+    .mine-card {
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .user-avatar {
+      width: 54px;
+      height: 54px;
+      display: grid;
+      place-items: center;
+      color: var(--primary);
+      background: var(--primary-light);
+      border-radius: 14px;
+      font-size: 20px;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+    .menu-list {
+      margin-top: 12px;
+      overflow: hidden;
+    }
+    .menu-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 52px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border-light);
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .menu-row:last-child { border-bottom: 0; }
+    .admin-switch {
+      min-height: 43px;
+      margin-bottom: 12px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--primary);
+      background: #fff;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      box-shadow: var(--shadow-card);
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1px;
+      overflow: hidden;
+      background: var(--border-light);
+      border-radius: 8px;
+      border: 1px solid var(--border-light);
+      box-shadow: var(--shadow-card);
+    }
+    .stat {
+      min-height: 90px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 8px;
+      background: #fff;
+    }
+    .stat-icon {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--primary);
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+    .stat-icon.orange { background: var(--orange); }
+    .stat-icon.blue { background: var(--blue); }
+    .stat-icon.green { background: var(--green); }
+    .stat small {
+      color: var(--text-regular);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .stat b {
+      display: block;
+      margin-top: 5px;
+      font-size: 22px;
+      line-height: 1;
+    }
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .quick {
+      padding: 12px 10px;
+    }
+    .quick i {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--orange);
+      border-radius: 8px;
+      font-style: normal;
+      font-weight: 900;
+    }
+    .quick b {
+      display: block;
+      margin-top: 9px;
+      font-size: 14px;
+    }
+    .quick p {
+      margin: 4px 0 0;
+      color: var(--text-light);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .field-card {
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .field-card label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--text-light);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .input, .picker-line, .textarea {
+      width: 100%;
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      color: var(--text-main);
+      background: var(--bg-light);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .textarea {
+      min-height: 80px;
+      align-items: flex-start;
+      padding-top: 10px;
+      color: var(--text-regular);
+      line-height: 1.5;
+    }
+    .deadline-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .pool-card {
+      padding: 10px;
+      margin-bottom: 8px;
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .pool-card img {
+      width: 48px;
+      height: 48px;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+    .checkbox {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--primary);
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .bottom-action {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 78px;
+      z-index: 18;
+      display: flex;
+      gap: 10px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.97);
+      border-top: 1px solid var(--border-light);
+      box-shadow: var(--shadow-bottom);
+    }
+    .bottom-action > div { flex: 1; }
+    .admin-list-card {
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .row-between {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .admin-list-card h4 {
+      margin: 0;
+      font-size: 15px;
+    }
+    .admin-list-card p {
+      margin: 5px 0 0;
+      color: var(--text-light);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .stock-row {
+      display: grid;
+      grid-template-columns: 54px minmax(0,1fr);
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .stock-row:last-child { border-bottom: 0; }
+    .stock-row img {
+      width: 54px;
+      height: 54px;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+    .progress {
+      height: 6px;
+      margin-top: 8px;
+      background: var(--bg-deep);
+      border-radius: var(--radius-pill);
+      overflow: hidden;
+    }
+    .progress i {
+      display: block;
+      height: 100%;
+      width: 62%;
+      background: linear-gradient(90deg, var(--primary), var(--primary-soft));
+      border-radius: inherit;
+    }
+    .address-card {
+      padding: 12px;
+      margin-bottom: 10px;
+      display: grid;
+      gap: 7px;
+    }
+    .address-card strong { font-size: 15px; }
+    .address-card p {
+      margin: 0;
+      color: var(--text-regular);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .login-top {
+      position: relative;
+      height: 214px;
+      margin: 0 -12px;
+      overflow: hidden;
+      background: linear-gradient(145deg, #fff4eb, #fff 54%, #ffe6eb);
+    }
+    .login-top img {
+      position: absolute;
+      right: -34px;
+      bottom: -8px;
+      width: 172px;
+      height: 132px;
+      object-fit: cover;
+      border-radius: 28px 0 0 28px;
+      box-shadow: 0 12px 30px rgba(94,48,30,.12);
+    }
+    .login-brand {
+      position: relative;
+      z-index: 2;
+      padding: 72px 0 0 36px;
+      width: 230px;
+    }
+    .login-brand h2 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1;
+    }
+    .login-brand p {
+      margin: 10px 0 0;
+      color: var(--text-regular);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+    .login-panel {
+      position: relative;
+      z-index: 3;
+      margin: -42px 0 0;
+      padding: 22px 15px 16px;
+      background: rgba(255,255,255,.96);
+      border: 1px solid rgba(255,255,255,.82);
+      border-radius: 12px;
+      box-shadow: 0 12px 35px rgba(67,38,28,.12);
+    }
+    .login-panel::before {
+      content: "";
+      display: block;
+      width: 29px;
+      height: 4px;
+      margin: 0 auto 13px;
+      background: #f0d8d1;
+      border-radius: var(--radius-pill);
+    }
+    .login-panel h3 {
+      margin: 0;
+      text-align: center;
+      font-size: 20px;
+    }
+    .login-panel p {
+      margin: 6px 0 0;
+      text-align: center;
+      color: var(--text-light);
+      font-size: 12px;
+    }
+    .agreement {
+      display: flex;
+      gap: 6px;
+      margin-top: 14px;
+      color: var(--text-regular);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .radio {
+      width: 12px;
+      height: 12px;
+      margin-top: 4px;
+      border: 1px solid var(--primary);
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--primary) 0 45%, #fff 48%);
+      flex-shrink: 0;
+    }
+    .assurance {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+      margin-top: 10px;
+    }
+    .assurance-item {
+      min-height: 56px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      background: rgba(255,255,255,.86);
+      border: 1px solid var(--border-light);
+      border-radius: 9px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .assurance-item span {
+      display: block;
+      margin-top: 3px;
+      color: var(--text-light);
+      font-size: 10px;
+      font-weight: 500;
+    }
+    .detail-gallery {
+      height: 220px;
+      margin: 0 -12px;
+      position: relative;
+      overflow: hidden;
+    }
+    .detail-gallery img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .detail-panel {
+      position: relative;
+      z-index: 2;
+      margin-top: -22px;
+      padding: 16px 14px;
+      border-radius: 14px 14px 8px 8px;
+    }
+    .detail-panel h2 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+    .detail-stats {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      color: var(--text-light);
+      font-size: 12px;
+    }
+    .buy-card {
+      padding: 12px;
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 900;
+    }
+    .stepper i {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      color: var(--primary);
+      background: var(--primary-light);
+      border-radius: 7px;
+      font-style: normal;
+    }
+    .paybar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 25;
+      display: grid;
+      grid-template-columns: 82px 1fr;
+      gap: 10px;
+      padding: 10px 12px 18px;
+      background: rgba(255,255,255,.98);
+      border-top: 1px solid var(--border-light);
+      box-shadow: var(--shadow-bottom);
+    }
+    .paybar .share {
+      height: 44px;
+      display: grid;
+      place-items: center;
+      color: var(--text-regular);
+      background: var(--bg-light);
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .paybar .join {
+      height: 44px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(90deg, var(--primary), var(--primary-soft));
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 900;
+    }
+    .modal-mask {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 12px;
+      background: rgba(20,28,38,.42);
+    }
+    .modal {
+      width: 100%;
+      max-height: 76%;
+      overflow: hidden;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: var(--shadow-pop);
+    }
+    .modal.center {
+      align-self: center;
+      max-width: 316px;
+      border-radius: 14px;
+    }
+    .modal-head {
+      min-height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .modal-head b { font-size: 17px; }
+    .modal-body {
+      padding: 14px 16px;
+      color: var(--text-regular);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      padding: 12px 16px 16px;
+      border-top: 1px solid var(--border-light);
+    }
+    .modal-actions > div { flex: 1; }
+    .sheet-option {
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-light);
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .sheet-option:last-child { border-bottom: 0; }
+    .checkmark { color: var(--primary); font-weight: 900; }
+    .upload-box {
+      min-height: 120px;
+      display: grid;
+      place-items: center;
+      color: var(--primary);
+      background: var(--primary-pale);
+      border: 1px dashed rgba(232,79,95,.35);
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .note {
+      margin: 10px 0 0;
+      color: var(--text-light);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .screen-label {
+      position: absolute;
+      right: 12px;
+      bottom: 88px;
+      z-index: 16;
+      padding: 5px 8px;
+      color: var(--text-light);
+      background: rgba(255,255,255,.88);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-pill);
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .design-notes {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .note-card {
+      padding: 14px;
+      background: #fff;
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      box-shadow: var(--shadow-card);
+    }
+    .note-card b {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .note-card p {
+      margin: 0;
+      color: var(--text-regular);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    @media (max-width: 900px) {
+      .board { padding: 24px 16px 48px; }
+      .board-head { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; justify-items: center; }
+      .mock { width: 100%; align-items: center; }
+      .mock-title { width: min(390px, 100%); }
+      .phone { width: min(390px, 100%); }
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <header class="board-head">
+      <div>
+        <div class="eyebrow">初炉小程序 / UI Design Board</div>
+        <h1>可落地 UI 界面设计图合集</h1>
+        <p>依据当前设计规范生成，覆盖用户端四个 tab、店长端五个 tab、登录、商品详情、确认订单和关键弹窗状态。风格原则是图片承载烘焙感，组件保持克制，后台偏任务效率。</p>
+      </div>
+      <div class="token-strip" aria-label="设计色板">
+        <i class="swatch" style="background:#e84f5f"></i>
+        <i class="swatch" style="background:#fff1f2"></i>
+        <i class="swatch" style="background:#c87932"></i>
+        <i class="swatch" style="background:#fff4e8"></i>
+        <i class="swatch" style="background:#1f9d64"></i>
+        <i class="swatch" style="background:#3578d4"></i>
+        <i class="swatch" style="background:#222832"></i>
+        <i class="swatch" style="background:#f6f7f9"></i>
+      </div>
+    </header>
+
+    <section>
+      <div class="section-title">
+        <h2>用户端核心 Tab</h2>
+        <span>首页 / 商品 / 订单 / 我的，底部导航完整展示</span>
+      </div>
+      <div class="grid">
+        <article class="mock">
+          <div class="mock-title">用户端：首页 <small>轮播图满图 + 今日开团 + 大家都在团</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav">
+                <div class="search">⌕ 搜索商品名称、口味或食材</div>
+                <div class="capsule">••• ◉</div>
+              </div>
+              <div class="hero">
+                <img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/banners/home-hero-cake.jpg" alt="草莓奶油礼盒" />
+                <div class="hero-copy">
+                  <span class="tag-light">今日推荐</span>
+                  <h3>草莓奶油礼盒<span>今日限量开团</span></h3>
+                  <div class="feature-row"><span>新鲜现做</span><span>冷链打包</span><span>次日发货</span></div>
+                </div>
+                <div class="dots"><i class="active"></i><i></i><i></i></div>
+              </div>
+              <section class="module card">
+                <div class="section-head">
+                  <div><h3>今日开团</h3><p>12 款商品正在团购</p></div>
+                  <div class="badge">今日 22:00 截单</div>
+                </div>
+                <div class="product-strip">
+                  <div class="product-card"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-strawberry-box.jpg" alt=""><div class="product-body"><div class="product-name">草莓奶油礼盒</div><div class="meta">已售 36 份</div><div class="price">￥68</div><div class="small-btn">去参团</div></div></div>
+                  <div class="product-card"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-toast.jpg" alt=""><div class="product-body"><div class="product-name">手作吐司</div><div class="meta">已售 42 份</div><div class="price">￥28</div><div class="small-btn">去参团</div></div></div>
+                  <div class="more-card"><div>查看更多<span>全部商品</span></div></div>
+                </div>
+              </section>
+              <section class="module card">
+                <div class="section-head"><h3>大家都在团</h3><div class="link">查看全部 〉</div></div>
+                <div class="activity-list">
+                  <div class="activity-item"><div class="avatar">王</div><div><b>王* 团了 2份</b><small>草莓奶油礼盒</small></div></div>
+                  <div class="activity-item"><div class="avatar">李</div><div><b>李* 团了 1份</b><small>手作吐司</small></div></div>
+                </div>
+              </section>
+            </div>
+            <nav class="tabbar"><div class="tab active"><i>⌂</i>首页</div><div class="tab"><i>▦</i>商品</div><div class="tab"><i>▤</i>订单</div><div class="tab"><i>○</i>我的</div></nav>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">用户端：商品 <small>分类横滑 + 双列商品卡 + 热销排序</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav"><div class="title-nav">全部商品</div><div class="capsule">••• ◉</div></div>
+              <div class="filters"><div class="filter active">全部</div><div class="filter">蛋糕</div><div class="filter">吐司</div><div class="filter">甜点</div><div class="filter">饮品</div></div>
+              <div class="list-tools"><span>共 20 款商品</span><span>热销优先 〉</span></div>
+              <div class="product-list">
+                <div class="product-card"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-strawberry-box.jpg"><div class="product-body"><div class="product-name">草莓奶油礼盒</div><div class="meta">已售 36 份 · 仅剩 12 份</div><div class="price">￥68</div><div class="small-btn">去参团</div></div></div>
+                <div class="product-card"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-toast.jpg"><div class="product-body"><div class="product-name">手作吐司</div><div class="meta">已售 42 份 · 仅剩 20 份</div><div class="price">￥28</div><div class="small-btn">去参团</div></div></div>
+                <div class="product-card"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-tart.jpg"><div class="product-body"><div class="product-name">酥皮蛋挞</div><div class="meta">已售 18 份 · 仅剩 30 份</div><div class="price">￥19.9</div><div class="small-btn">去参团</div></div></div>
+                <div class="product-card"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/banners/home-hero-cake.jpg"><div class="product-body"><div class="product-name">季节限定蛋糕</div><div class="meta">已售 9 份 · 仅剩 8 份</div><div class="price">￥88</div><div class="small-btn">去参团</div></div></div>
+              </div>
+            </div>
+            <nav class="tabbar"><div class="tab"><i>⌂</i>首页</div><div class="tab active"><i>▦</i>商品</div><div class="tab"><i>▤</i>订单</div><div class="tab"><i>○</i>我的</div></nav>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">用户端：订单 <small>待发货 / 已发货 / 已结束合并展示</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav"><div class="title-nav">我的订单</div><div class="capsule">••• ◉</div></div>
+              <div class="order-tabs"><div class="order-tab active">全部(6)</div><div class="order-tab">待发货</div><div class="order-tab">已发货</div><div class="order-tab">已结束</div></div>
+              <div class="order-card card">
+                <div class="order-top"><div class="order-no">订单 CH20260617001</div><span class="status-tag">待发货</span></div>
+                <div class="order-goods"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-strawberry-box.jpg"><div><h4>草莓奶油礼盒</h4><p>￥68 × 1 · 明日配送</p></div></div>
+                <div class="row-between"><b class="price">￥68</b><div class="order-actions"><div class="outline-btn">售后说明</div><div class="primary-btn">查看详情</div></div></div>
+              </div>
+              <div class="order-card card">
+                <div class="order-top"><div class="order-no">订单 CH20260616008</div><span class="status-tag blue">已发货</span></div>
+                <div class="order-goods"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-toast.jpg"><div><h4>手作吐司</h4><p>￥28 × 2 · 门店自提</p></div></div>
+                <div class="row-between"><b class="price">￥56</b><div class="order-actions"><div class="outline-btn">再来一单</div><div class="primary-btn">确认收货</div></div></div>
+              </div>
+            </div>
+            <nav class="tabbar"><div class="tab"><i>⌂</i>首页</div><div class="tab"><i>▦</i>商品</div><div class="tab active"><i>▤</i>订单</div><div class="tab"><i>○</i>我的</div></nav>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">用户端：我的 <small>个人信息 / 店长入口 / 地址 / 关于门店</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav"><div class="title-nav">我的</div><div class="capsule">••• ◉</div></div>
+              <div class="mine-card card"><div class="user-avatar">甜</div><div><div class="brand-name">微信用户</div><div class="brand-sub">今天也要吃点新鲜的</div></div><span class="badge">已登录</span></div>
+              <div class="menu-list card">
+                <div class="menu-row"><span>店长入口</span><span>〉</span></div>
+                <div class="menu-row"><span>我的订单</span><span>〉</span></div>
+                <div class="menu-row"><span>收货地址</span><span>〉</span></div>
+                <div class="menu-row"><span>关于门店</span><span>〉</span></div>
+              </div>
+              <section class="module card">
+                <div class="section-head"><h3>售后与服务</h3><span class="status-tag green">在线</span></div>
+                <p class="note">营业时间 09:00-21:00，订单问题可联系门店客服处理。</p>
+              </section>
+            </div>
+            <nav class="tabbar"><div class="tab"><i>⌂</i>首页</div><div class="tab"><i>▦</i>商品</div><div class="tab"><i>▤</i>订单</div><div class="tab active"><i>○</i>我的</div></nav>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>关键购买链路</h2>
+        <span>登录 / 商品详情 / 确认订单，保证真实业务闭环可视化</span>
+      </div>
+      <div class="grid">
+        <article class="mock">
+          <div class="mock-title">登录页 <small>图片承担氛围，表单卡片紧凑</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="login-top">
+                <div class="back">‹</div>
+                <img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-strawberry-box.jpg" alt="">
+                <div class="login-brand"><h2>初炉</h2><p>每日新鲜，团购更甜蜜</p></div>
+              </div>
+              <div class="login-panel">
+                <h3>欢迎回来</h3>
+                <p>选择登录方式，开启甜蜜之旅</p>
+                <div style="height:17px"></div>
+                <div class="wechat-btn">微信一键登录</div>
+                <div style="height:9px"></div>
+                <div class="outline-btn" style="width:100%">游客登录</div>
+                <div class="agreement"><i class="radio"></i><span>我已阅读并同意 <b style="color:var(--primary)">《用户协议》</b> <b style="color:var(--primary)">《隐私政策》</b></span></div>
+              </div>
+              <div class="assurance">
+                <div class="assurance-item">严选食材<span>品质安心</span></div>
+                <div class="assurance-item">新鲜现做<span>当日制作</span></div>
+                <div class="assurance-item">明日配送<span>准时送达</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">商品详情 <small>大图 / 价格 / 已售库存 / 参团底栏</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen" style="padding-top:0">
+              <div class="detail-gallery"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-strawberry-box.jpg" alt=""><div class="back" style="position:absolute;left:12px;top:8px;background:rgba(255,255,255,.88);border-radius:50%">‹</div></div>
+              <div class="detail-panel card">
+                <div class="row-between"><h2>草莓奶油礼盒</h2><span class="status-tag">明日配送</span></div>
+                <p class="note">动物奶油搭配新鲜草莓，适合家庭分享和生日小聚。</p>
+                <div class="price">￥68 <span style="font-size:12px;color:var(--text-light);text-decoration:line-through">￥88</span></div>
+                <div class="detail-stats"><span>已售 36 份</span><span>仅剩 12 份</span><span>今日 22:00 截单</span></div>
+              </div>
+              <div class="buy-card card"><div><b>购买数量</b><div class="meta">限购 5 份</div></div><div class="stepper"><i>-</i>1<i>+</i></div></div>
+              <section class="module card"><div class="section-head"><h3>大家都在团</h3><span class="link">查看全部 〉</span></div><div class="activity-list"><div class="activity-item"><div class="avatar">王</div><div><b>王* 团了 2份</b><small>刚刚下单</small></div></div><div class="activity-item"><div class="avatar">张</div><div><b>张* 团了 1份</b><small>5分钟前</small></div></div></div></section>
+            </div>
+            <div class="paybar"><div class="share">分享</div><div class="join">立即参团 ￥68</div></div>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">确认订单 <small>地址 / 商品 / 履约 / 费用 / 支付底栏</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav"><div class="back">‹</div><div class="title-nav">确认订单</div><div style="width:34px"></div></div>
+              <div class="address-card card"><div class="row-between"><strong>王小甜 138****8888</strong><span>〉</span></div><p>上海市徐汇区初炉社区店 3 号楼 1201</p></div>
+              <div class="order-card card"><div class="section-head"><h3>商品清单</h3><span class="status-tag">团购价</span></div><div class="order-goods"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-strawberry-box.jpg"><div><h4>草莓奶油礼盒</h4><p>￥68 × 1</p></div><div class="price">￥68</div></div></div>
+              <div class="menu-list card"><div class="menu-row"><span>配送时间</span><span>明日配送 〉</span></div><div class="menu-row"><span>履约方式</span><span>快递发货 〉</span></div><div class="menu-row"><span>订单备注</span><span>请输入 〉</span></div></div>
+              <div class="menu-list card"><div class="menu-row"><span>商品金额</span><b>￥68.00</b></div><div class="menu-row"><span>配送费</span><b>￥6.00</b></div><div class="menu-row"><span>团购优惠</span><b style="color:var(--primary)">-￥4.00</b></div></div>
+            </div>
+            <div class="bottom-action"><div><div class="meta">实付款</div><div class="price">￥70.00</div></div><div class="primary-btn">提交订单</div></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>店长端核心 Tab</h2>
+        <span>工作台 / 开团 / 订单 / 商品 / 发货，底部导航完整展示</span>
+      </div>
+      <div class="grid">
+        <article class="mock">
+          <div class="mock-title">店长端：工作台 <small>取消大 Hero，顶部直接切回用户端</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav"><div class="brand"><img class="logo" src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/icons/logo.png"><div><div class="brand-name">初炉</div><div class="brand-sub">新鲜烘焙</div></div></div><div class="capsule">••• ◉</div></div>
+              <div class="admin-switch"><span>⌂ 切回用户端</span><span>〉</span></div>
+              <div class="stats-grid">
+                <div class="stat"><div class="stat-icon">单</div><div><small>今日订单</small><b>18</b></div></div>
+                <div class="stat"><div class="stat-icon orange">￥</div><div><small>今日销售额</small><b>1268</b></div></div>
+                <div class="stat"><div class="stat-icon blue">发</div><div><small>待发货</small><b>12</b></div></div>
+                <div class="stat"><div class="stat-icon green">团</div><div><small>正在开团</small><b>8</b></div></div>
+              </div>
+              <div class="quick-grid"><div class="quick card"><i>配</i><b>配置中心</b><p>店铺、轮播和分类配置</p></div><div class="quick card"><i style="background:var(--green)">团</i><b>团购管理</b><p>查看、结束或删除团购</p></div><div class="quick card"><i style="background:var(--blue)">图</i><b>数据统计</b><p>销售额与热销商品</p></div><div class="quick card"><i style="background:var(--primary)">商</i><b>商品管理</b><p>上下架与库存维护</p></div></div>
+              <section class="module card"><div class="section-head"><div><h3>正在开团</h3><p>当前正在团购的商品</p></div><span class="link">查看全部 〉</span></div><div class="stock-row"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-strawberry-box.jpg"><div><b>草莓奶油礼盒</b><p class="note">已售 36 · 库存 12</p></div></div></section>
+            </div>
+            <nav class="tabbar"><div class="tab active"><i>台</i>工作台</div><div class="tab"><i>＋</i>开团</div><div class="tab"><i>单</i>订单</div><div class="tab"><i>商</i>商品</div><div class="tab"><i>发</i>发货</div></nav>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">店长端：开团 <small>自定义截单时间 + 商品池选择</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav"><div class="title-nav">发布开团</div><div class="capsule">••• ◉</div></div>
+              <div class="field-card card"><label>开团标题</label><div class="input">今日新鲜烘焙团</div></div>
+              <div class="field-card card"><label>截单时间</label><div class="deadline-grid"><div class="picker-line">2026-06-17 <span>〉</span></div><div class="picker-line">22:00 <span>〉</span></div></div></div>
+              <div class="field-card card"><label>配送说明</label><div class="picker-line">次日打包发货 <span>〉</span></div></div>
+              <div class="section-head" style="margin-top:14px"><div><h3>选择商品</h3><p>已选 3/20 款</p></div><span class="badge">预计 ￥1268</span></div>
+              <div class="pool-card card"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-strawberry-box.jpg"><div><b>草莓奶油礼盒</b><p class="note">库存 48 · 限购 5</p></div><div class="checkbox">✓</div></div>
+              <div class="pool-card card"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-toast.jpg"><div><b>手作吐司</b><p class="note">库存 80 · 限购 5</p></div><div class="checkbox">✓</div></div>
+            </div>
+            <div class="bottom-action"><div class="outline-btn">保存草稿</div><div class="primary-btn">发布开团</div></div>
+            <nav class="tabbar"><div class="tab"><i>台</i>工作台</div><div class="tab active"><i>＋</i>开团</div><div class="tab"><i>单</i>订单</div><div class="tab"><i>商</i>商品</div><div class="tab"><i>发</i>发货</div></nav>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">店长端：订单 <small>筛选状态 + 快速发货 / 联系顾客</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav"><div class="title-nav">订单管理</div><div class="capsule">••• ◉</div></div>
+              <div class="admin-tabs"><div class="order-tab active">全部</div><div class="order-tab">待发货</div><div class="order-tab">已发货</div><div class="order-tab">已结束</div></div>
+              <div class="order-card card"><div class="order-top"><div class="order-no">王小甜 · 138****8888</div><span class="status-tag">待发货</span></div><div class="order-goods"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-strawberry-box.jpg"><div><h4>草莓奶油礼盒 ×1</h4><p>上海市徐汇区初炉社区店</p></div></div><div class="order-actions"><div class="outline-btn">联系顾客</div><div class="primary-btn">标记发货</div></div></div>
+              <div class="order-card card"><div class="order-top"><div class="order-no">李小桃 · 139****6666</div><span class="status-tag blue">已发货</span></div><div class="order-goods"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-toast.jpg"><div><h4>手作吐司 ×2</h4><p>门店自提 · 明日 10:00</p></div></div><div class="order-actions"><div class="outline-btn">复制地址</div><div class="primary-btn">查看详情</div></div></div>
+            </div>
+            <nav class="tabbar"><div class="tab"><i>台</i>工作台</div><div class="tab"><i>＋</i>开团</div><div class="tab active"><i>单</i>订单</div><div class="tab"><i>商</i>商品</div><div class="tab"><i>发</i>发货</div></nav>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">店长端：商品 <small>备货概览 / 上下架 / 编辑</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav"><div class="title-nav">商品管理</div><div class="capsule">••• ◉</div></div>
+              <div class="stats-grid"><div class="stat"><div class="stat-icon">款</div><div><small>上架商品</small><b>20</b></div></div><div class="stat"><div class="stat-icon orange">备</div><div><small>今日备货</small><b>86</b></div></div></div>
+              <div class="filters"><div class="filter active">全部</div><div class="filter">团购中</div><div class="filter">已下架</div><div class="filter">售罄</div></div>
+              <div class="admin-list-card card"><div class="stock-row"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-strawberry-box.jpg"><div><div class="row-between"><b>草莓奶油礼盒</b><span class="status-tag">团购中</span></div><p>已售 36 · 库存 12</p><div class="progress"><i></i></div></div></div><div class="order-actions"><div class="outline-btn">编辑</div><div class="outline-btn">下架</div></div></div>
+              <div class="admin-list-card card"><div class="stock-row"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/products/product-tart.jpg"><div><div class="row-between"><b>酥皮蛋挞</b><span class="status-tag gray">已下架</span></div><p>已售 18 · 库存 30</p><div class="progress"><i style="width:30%"></i></div></div></div><div class="order-actions"><div class="outline-btn">编辑</div><div class="danger-btn">删除</div></div></div>
+            </div>
+            <nav class="tabbar"><div class="tab"><i>台</i>工作台</div><div class="tab"><i>＋</i>开团</div><div class="tab"><i>单</i>订单</div><div class="tab active"><i>商</i>商品</div><div class="tab"><i>发</i>发货</div></nav>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">店长端：发货 <small>地址汇总 / 勾选 / CSV 导出</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav"><div class="title-nav">发货清单</div><div class="capsule">••• ◉</div></div>
+              <div class="admin-tabs"><div class="order-tab active">全部 12</div><div class="order-tab">快递 8</div><div class="order-tab">自提 4</div></div>
+              <div class="address-card card"><div class="row-between"><strong>王小甜 138****8888</strong><span class="checkbox">✓</span></div><p>上海市徐汇区初炉社区店 3 号楼 1201</p><p>草莓奶油礼盒 ×1；手作吐司 ×2</p></div>
+              <div class="address-card card"><div class="row-between"><strong>李小桃 139****6666</strong><span class="checkbox">✓</span></div><p>门店自提，明日 10:00</p><p>酥皮蛋挞 ×2</p></div>
+              <div class="address-card card"><div class="row-between"><strong>周小麦 136****1234</strong><span class="status-tag gray">未选</span></div><p>上海市长宁区幸福路 88 号</p><p>手作吐司 ×1</p></div>
+            </div>
+            <div class="bottom-action"><div><div class="meta">已选 2 单</div><div class="price" style="font-size:18px">导出发货清单</div></div><div class="primary-btn">导出 CSV</div></div>
+            <nav class="tabbar"><div class="tab"><i>台</i>工作台</div><div class="tab"><i>＋</i>开团</div><div class="tab"><i>单</i>订单</div><div class="tab"><i>商</i>商品</div><div class="tab active"><i>发</i>发货</div></nav>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>配置、详情与弹窗状态</h2>
+        <span>覆盖轮播配置、分类编辑、删除确认、协议、备注、配送时间、上传图片</span>
+      </div>
+      <div class="grid">
+        <article class="mock">
+          <div class="mock-title">轮播配置页 <small>预览必须与首页真实轮播一致</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen">
+              <div class="nav"><div class="back">‹</div><div class="title-nav">轮播配置</div><div style="width:34px"></div></div>
+              <div class="module card">
+                <div class="section-head"><div><h3>首页轮播预览</h3><p>当前启用 3 张</p></div><span class="badge">自动播放</span></div>
+                <div class="hero" style="height:169px"><img src="https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/banners/home-hero-cake.jpg"><div class="hero-copy"><span class="tag-light">今日推荐</span><h3>草莓奶油礼盒<span>今日限量开团</span></h3><div class="feature-row"><span>新鲜现做</span><span>冷链打包</span><span>次日发货</span></div></div><div class="dots"><i class="active"></i><i></i><i></i></div></div>
+              </div>
+              <div class="menu-list card"><div class="menu-row"><span>自动播放</span><span class="status-tag green">开</span></div><div class="menu-row"><span>循环播放</span><span class="status-tag green">开</span></div><div class="menu-row"><span>显示圆点</span><span class="status-tag green">开</span></div></div>
+              <div class="field-card card"><label>图片</label><div class="picker-line">首页横幅 <span>〉</span></div><div class="outline-btn" style="margin-top:8px;width:100%">上传新图</div></div>
+            </div>
+            <div class="bottom-action"><div class="outline-btn">恢复默认</div><div class="primary-btn">保存配置</div></div>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">分类编辑弹窗 <small>用于新增、编辑分类</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen"><div class="nav"><div class="back">‹</div><div class="title-nav">分类管理</div><div style="width:34px"></div></div><div class="admin-list-card card"><div class="row-between"><b>蛋糕</b><span class="badge">8 款商品</span></div></div><div class="admin-list-card card"><div class="row-between"><b>吐司</b><span class="badge">5 款商品</span></div></div></div>
+            <div class="modal-mask"><div class="modal"><div class="modal-head"><b>编辑分类</b><span>×</span></div><div class="modal-body"><div class="field-card" style="padding:0;margin-bottom:12px"><label>分类名称</label><div class="input">蛋糕甜点</div></div><div class="field-card" style="padding:0;margin:0"><label>分类标识</label><div class="input">cake</div></div></div><div class="modal-actions"><div class="outline-btn">取消</div><div class="primary-btn">保存</div></div></div></div>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">删除确认弹窗 <small>危险操作必须二次确认</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen"><div class="nav"><div class="title-nav">商品管理</div><div class="capsule">••• ◉</div></div><div class="admin-list-card card"><div class="row-between"><b>酥皮蛋挞</b><span class="status-tag gray">已下架</span></div><p>已售 18 · 库存 30</p></div></div>
+            <div class="modal-mask"><div class="modal center"><div class="modal-head"><b>删除商品</b></div><div class="modal-body">删除后商品不会再出现在用户端。该操作不可撤销，请确认商品没有正在进行的团购。</div><div class="modal-actions"><div class="outline-btn">取消</div><div class="danger-btn">确认删除</div></div></div></div>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">配送时间选择 <small>ActionSheet 底部弹出</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen"><div class="nav"><div class="back">‹</div><div class="title-nav">确认订单</div><div style="width:34px"></div></div><div class="menu-list card"><div class="menu-row"><span>配送时间</span><span>明日配送 〉</span></div></div></div>
+            <div class="modal-mask"><div class="modal"><div class="modal-head"><b>选择配送时间</b><span>×</span></div><div class="modal-body"><div class="sheet-option">明日配送 <span class="checkmark">✓</span></div><div class="sheet-option">后天配送</div><div class="sheet-option">门店自提（明日）</div></div><div class="modal-actions"><div class="outline-btn">取消</div></div></div></div>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">订单备注弹窗 <small>用户输入，多行文本</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen"><div class="nav"><div class="back">‹</div><div class="title-nav">确认订单</div><div style="width:34px"></div></div><div class="menu-list card"><div class="menu-row"><span>订单备注</span><span>请输入 〉</span></div></div></div>
+            <div class="modal-mask"><div class="modal center"><div class="modal-head"><b>订单备注</b></div><div class="modal-body"><div class="textarea">少糖，生日牌写“小满生日快乐”。</div><p class="note">最多 200 字，门店会在制作前查看。</p></div><div class="modal-actions"><div class="outline-btn">取消</div><div class="primary-btn">确定</div></div></div></div>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">上传图片弹窗 <small>商品图、轮播图、店铺 Logo 共用</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen"><div class="nav"><div class="back">‹</div><div class="title-nav">商品编辑</div><div style="width:34px"></div></div><div class="field-card card"><label>商品图片</label><div class="upload-box">上传云端图片</div></div></div>
+            <div class="modal-mask"><div class="modal"><div class="modal-head"><b>上传图片</b><span>×</span></div><div class="modal-body"><div class="upload-box">选择图片并上传至云存储</div><p class="note">图片会保存为 cloud:// 文件 ID，页面展示时转换为可访问地址。</p></div><div class="modal-actions"><div class="outline-btn">取消</div><div class="primary-btn">选择图片</div></div></div></div>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">协议弹窗 <small>登录页用户协议和隐私政策</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen"><div class="login-top"><div class="login-brand"><h2>初炉</h2><p>每日新鲜，团购更甜蜜</p></div></div><div class="login-panel"><h3>欢迎回来</h3><p>选择登录方式，开启甜蜜之旅</p><div style="height:17px"></div><div class="wechat-btn">微信一键登录</div></div></div>
+            <div class="modal-mask"><div class="modal center"><div class="modal-head"><b>用户协议</b></div><div class="modal-body">欢迎使用初炉烘焙。我们会用于订单履约、配送通知和售后沟通，不会展示无关营销内容。</div><div class="modal-actions"><div class="primary-btn">我知道了</div></div></div></div>
+          </div>
+        </article>
+
+        <article class="mock">
+          <div class="mock-title">空状态与错误状态 <small>给出下一步，不只写暂无数据</small></div>
+          <div class="phone">
+            <div class="status"><span>16:54</span><span>5G 100%</span></div>
+            <div class="screen"><div class="nav"><div class="title-nav">我的订单</div><div class="capsule">••• ◉</div></div><div class="order-tabs"><div class="order-tab active">待发货</div><div class="order-tab">已发货</div><div class="order-tab">已结束</div></div><div class="card" style="margin-top:80px;padding:34px 20px;text-align:center"><div class="user-avatar" style="margin:0 auto 14px">空</div><h3 style="margin:0;font-size:18px">还没有待发货订单</h3><p class="note">今天的开团商品正在准备中，去首页看看新鲜出炉的甜点。</p><div class="primary-btn" style="margin-top:18px;width:100%">去首页看看</div></div></div>
+            <nav class="tabbar"><div class="tab"><i>⌂</i>首页</div><div class="tab"><i>▦</i>商品</div><div class="tab active"><i>▤</i>订单</div><div class="tab"><i>○</i>我的</div></nav>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>落地说明</h2>
+        <span>给设计师和前端对齐的具体规则</span>
+      </div>
+      <div class="design-notes">
+        <div class="note-card"><b>用户端首屏</b><p>必须优先展示真实商品图和今日开团。轮播文字覆盖图片时必须加左侧暗渐变，不能让文字直接压在亮图上。</p></div>
+        <div class="note-card"><b>店长端首屏</b><p>不再使用大面积品牌 Hero。顶部只保留“切回用户端”，其后直接进入统计和待处理任务。</p></div>
+        <div class="note-card"><b>弹窗规则</b><p>底部 sheet 用于选择类操作，居中弹窗用于确认、协议、备注。危险操作必须使用浅红背景按钮，并保留取消按钮。</p></div>
+        <div class="note-card"><b>按钮层级</b><p>每个页面只允许一个最强主按钮。游客登录、取消、恢复默认等必须使用白底浅边框样式。</p></div>
+        <div class="note-card"><b>图标规则</b><p>设计稿中符号仅用于占位，前端落地统一使用 AppIcon/uni-icons，不再混用 emoji 和手写符号。</p></div>
+        <div class="note-card"><b>图片规则</b><p>商品图、轮播图、Logo 均来自云存储。设计稿中的图片地址对应当前云端资源，前端仍以 cloud:// 文件 ID 入库。</p></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

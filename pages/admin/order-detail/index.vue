@@ -14,6 +14,24 @@
 
     <AddressCard class="detail-card" :address="addressInfo" variant="receiver" />
 
+    <view v-if="order.refundStatus" class="refund-card card">
+      <view class="refund-card__head">
+        <view>
+          <view class="section-title">{{ order.refundStatus === 'pending' ? '售后申请' : '售后记录' }}</view>
+          <text>{{ order.refundNo || '待生成编号' }}</text>
+        </view>
+        <StatusTag :type="refundTagType" :text="refundTagText" />
+      </view>
+      <view class="refund-card__body">
+        <view><text>申请金额</text><view>￥{{ order.refundAmount || order.payable || order.amount }}</view></view>
+        <view><text>申请原因</text><view>{{ order.refundReasonText || '用户已提交售后申请' }}</view></view>
+      </view>
+      <view v-if="order.refundStatus === 'pending'" class="refund-card__actions">
+        <button class="refund-card__btn" @tap="handleRefund('rejected')">拒绝售后</button>
+        <button class="refund-card__btn refund-card__btn--primary" @tap="handleRefund('approved')">同意退款</button>
+      </view>
+    </view>
+
     <view class="quick-actions card">
       <view class="section-head">
         <view class="section-title">处理动作</view>
@@ -24,7 +42,6 @@
         <button @tap="contactCustomer">联系顾客</button>
         <button @tap="copyOrderId">复制订单号</button>
         <button @tap="goDelivery">配送地址</button>
-        <button @tap="goRouteManage">批次排线</button>
       </view>
     </view>
 
@@ -45,6 +62,7 @@
       <view class="info-row"><text>订单编号</text><view>{{ order.detailId }}</view></view>
       <view class="info-row"><text>下单时间</text><view>{{ order.createDateTime }}</view></view>
       <view class="info-row"><text>支付状态</text><view>{{ order.payStatusText }}</view></view>
+      <view v-if="order.refundStatus" class="info-row"><text>退款状态</text><view>{{ refundText }}</view></view>
       <view class="info-row"><text>发货时间</text><view>{{ order.deliveryTime || order.deliveryText }}</view></view>
       <view class="info-row"><text>订单备注</text><view>{{ order.note || '无' }}</view></view>
     </view>
@@ -69,7 +87,6 @@
 
     <view class="bottom-actions">
       <button class="ghost-btn" @tap="copyOrderId">复制订单号</button>
-      <button class="ghost-btn" @tap="goRouteManage">批次排线</button>
       <button v-if="nextActionText" class="primary-btn" @tap="advanceStatus">{{ nextActionText }}</button>
     </view>
   </view>
@@ -79,7 +96,7 @@
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import AddressCard from '@/components/AddressCard/AddressCard.vue'
 import StatusTag from '@/components/StatusTag/StatusTag.vue'
-import { getAdminOrderById, updateOrderStatus } from '@/services/dataService'
+import { getAdminOrderById, handleRefundRequest, updateOrderStatus } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
 
@@ -110,6 +127,22 @@ export default {
       if (this.order.status === 'pendingDelivery' || this.order.status === 'paid') return '标记发货'
       if (this.order.status === 'delivering') return '标记已完成'
       return ''
+    },
+    refundText() {
+      if (this.order.refundStatus === 'pending') return `处理中${this.order.refundNo ? ' · ' + this.order.refundNo : ''}`
+      if (this.order.refundStatus === 'approved') return '已同意退款'
+      if (this.order.refundStatus === 'rejected') return '已拒绝退款'
+      return this.order.refundStatus
+    },
+    refundTagType() {
+      if (this.order.refundStatus === 'approved') return 'refundApproved'
+      if (this.order.refundStatus === 'rejected') return 'refundRejected'
+      return 'refund'
+    },
+    refundTagText() {
+      if (this.order.refundStatus === 'approved') return '已同意'
+      if (this.order.refundStatus === 'rejected') return '已拒绝'
+      return '待处理'
     },
     renderItems() {
       return (this.order.items || []).map((item, index) => ({
@@ -150,9 +183,6 @@ export default {
     goDelivery() {
       uni.navigateTo({ url: '/pages/admin/delivery-address/index' })
     },
-    goRouteManage() {
-      uni.navigateTo({ url: '/pages/admin/route-manage/index' })
-    },
     async advanceStatus() {
       const nextStatus = this.order.status === 'delivering' ? 'completed' : 'delivering'
       try {
@@ -165,6 +195,30 @@ export default {
         uni.hideLoading()
         showCloudError(error)
       }
+    },
+    handleRefund(status) {
+      const approved = status === 'approved'
+      uni.showModal({
+        title: approved ? '同意退款' : '拒绝售后',
+        content: approved
+          ? '确认同意该退款申请吗？订单会标记为已同意退款。'
+          : '确认拒绝该售后申请吗？订单会标记为已拒绝退款。',
+        confirmText: approved ? '同意' : '拒绝',
+        confirmColor: approved ? '#ff5c72' : '#8f4d20',
+        success: async ({ confirm }) => {
+          if (!confirm) return
+          try {
+            uni.showLoading({ title: '处理中' })
+            await handleRefundRequest(this.order.id, status)
+            await this.loadOrder(this.order.id)
+            uni.hideLoading()
+            uni.showToast({ title: approved ? '已同意退款' : '已拒绝售后', icon: 'success' })
+          } catch (error) {
+            uni.hideLoading()
+            showCloudError(error)
+          }
+        }
+      })
     }
   }
 }
@@ -179,6 +233,7 @@ export default {
 
 .status-banner,
 .detail-card,
+.refund-card,
 .quick-actions,
 .goods-card,
 .info-card,
@@ -200,6 +255,76 @@ export default {
 
 .quick-actions {
   padding: 24rpx;
+}
+
+.refund-card {
+  padding: 24rpx;
+  border-color: rgba(200, 121, 50, 0.22);
+  background: linear-gradient(180deg, #fffaf2 0%, #fffdf9 100%);
+}
+
+.refund-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.refund-card__head text {
+  display: block;
+  margin-top: 6rpx;
+  color: $color-text-light;
+  font-size: 24rpx;
+}
+
+.refund-card__body {
+  margin-top: 18rpx;
+  border-top: 1rpx dashed $color-border-light;
+}
+
+.refund-card__body > view {
+  display: flex;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding-top: 16rpx;
+  color: $color-text-regular;
+  font-size: 26rpx;
+}
+
+.refund-card__body text {
+  flex-shrink: 0;
+  color: $color-text-main;
+  font-weight: 600;
+}
+
+.refund-card__body view view {
+  text-align: right;
+}
+
+.refund-card__actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 22rpx;
+}
+
+.refund-card__btn {
+  @include flex-center;
+  flex: 1;
+  height: 72rpx;
+  margin: 0;
+  color: $color-orange-dark;
+  background: #fff;
+  border: 1rpx solid rgba(200, 121, 50, 0.32);
+  border-radius: $radius-pill;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.refund-card__btn--primary {
+  color: #fff;
+  background: $gradient-primary;
+  border-color: transparent;
+  box-shadow: $shadow-btn;
 }
 
 .section-head {
@@ -408,7 +533,7 @@ export default {
   display: flex;
   gap: 20rpx;
   padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.98);
+  background: rgba(255, 253, 249, 0.98);
   border-top: 1rpx solid $color-border-light;
   box-shadow: $shadow-bottom;
 }

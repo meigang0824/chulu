@@ -116,7 +116,9 @@ export default {
         { key: 'deliveryTime', label: '默认发货时间', placeholder: '例如：次日打包发货' },
         { key: 'customerService', label: '客服时间', placeholder: '例如：8:00–20:00' },
         { key: 'phone', label: '联系电话', placeholder: '例如：400-888-2025' },
-        { key: 'address', label: '门店地址', placeholder: '请输入门店详细地址', type: 'textarea', maxlength: 120 }
+        { key: 'address', label: '门店地址', placeholder: '请输入门店详细地址', type: 'textarea', maxlength: 120 },
+        { key: 'orderTemplateId', label: '下单订阅模板ID', placeholder: '微信公众平台订阅消息模板ID' },
+        { key: 'afterSalesTemplateId', label: '售后订阅模板ID', placeholder: '微信公众平台订阅消息模板ID' }
       ],
       checkoutFields: [
         { key: 'deliveryTime', label: '确认订单发货文案', placeholder: '例如：次日打包发货' },
@@ -305,8 +307,8 @@ export default {
   padding: 0 24rpx;
   color: $color-primary;
   background: $color-primary-light;
-  border: 1rpx solid rgba(232, 79, 95, 0.16);
-  border-radius: $radius-md;
+  border: 1rpx solid rgba(255, 92, 114, 0.18);
+  border-radius: $radius-pill;
   font-size: 24rpx;
   font-weight: 700;
   line-height: 62rpx;

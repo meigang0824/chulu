@@ -70,21 +70,21 @@ export default {
 
 .store-about { padding-bottom: 180rpx; }
 .hero,.section { margin-top:24rpx; }
-.hero { padding:36rpx 28rpx; text-align:center; background:$gradient-hero; }
-.hero__logo { width:112rpx; height:112rpx; margin:0 auto; border-radius:50%; }
+.hero { padding:40rpx 28rpx 34rpx; text-align:center; background:$gradient-hero; border:1rpx solid rgba(111, 63, 37, 0.12); box-shadow:$shadow-pop; }
+.hero__logo { width:116rpx; height:116rpx; margin:0 auto; border-radius:50%; border:6rpx solid rgba(255, 253, 249, 0.92); box-shadow:0 10rpx 26rpx rgba(82, 43, 23, 0.12); }
 .hero__title { margin-top:20rpx; color:$color-text-main; font-size:40rpx; font-weight:800; }
 .hero__subtitle { margin-top:12rpx; color:$color-text-regular; font-size:26rpx; }
-.hero__tag { display:inline-flex; margin-top:18rpx; padding:10rpx 20rpx; color:$color-orange; background:$color-orange-light; border-radius:$radius-pill; font-size:24rpx; }
-.section { padding:28rpx; }
+.hero__tag { display:inline-flex; margin-top:18rpx; padding:10rpx 22rpx; color:$color-orange-dark; background:rgba(255, 242, 220, 0.92); border:1rpx solid rgba(200, 121, 50, 0.16); border-radius:$radius-pill; font-size:24rpx; font-weight:700; }
+.section { padding:28rpx; background:$color-card; border:1rpx solid $color-border-light; }
 .section__title { color:$color-text-main; font-size:32rpx; font-weight:800; }
 .info-row { display:flex; justify-content:space-between; gap:24rpx; padding-top:18rpx; color:$color-text-regular; font-size:26rpx; }
 .info-row text { flex-shrink:0; color:$color-text-main; }
 .info-row view { min-width:0; text-align:right; line-height:1.5; }
 .assurance,.notice,.tip { margin-top:18rpx; color:$color-text-regular; font-size:26rpx; line-height:1.6; }
 .badge-list { display:flex; flex-wrap:wrap; gap:14rpx; margin-top:20rpx; }
-.badge { padding:12rpx 18rpx; color:$color-text-main; background:$color-bg-light; border-radius:16rpx; font-size:24rpx; }
-.bottom-actions { position:fixed; left:0; right:0; bottom:0; display:flex; gap:20rpx; padding:18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background:rgba(255,255,255,.98); border-top:1rpx solid $color-border-light; }
+.badge { padding:12rpx 18rpx; color:$color-text-main; background:$color-primary-pale; border:1rpx solid $color-border-light; border-radius:$radius-pill; font-size:24rpx; font-weight:600; }
+.bottom-actions { position:fixed; left:0; right:0; bottom:0; display:flex; gap:20rpx; padding:18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background:rgba(255, 253, 249, .98); border-top:1rpx solid $color-border-light; box-shadow:$shadow-footer; }
 .ghost-btn,.primary-btn { @include flex-center; flex:1; height:88rpx; margin:0; border-radius:$radius-pill; font-size:30rpx; font-weight:700; }
-.ghost-btn { color:$color-text-main; background:#fff; border:1rpx solid $color-border; }
+.ghost-btn { color:$color-text-main; background:$color-card; border:1rpx solid $color-border; }
 .primary-btn { color:#fff; background:$gradient-primary; border:none; }
 </style>

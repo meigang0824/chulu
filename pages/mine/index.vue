@@ -45,7 +45,7 @@
     <view class="menu card">
       <view class="menu__item" v-for="item in visibleMenus" :key="item.text" @tap="handleMenu(item)">
         <view class="menu__icon">
-          <AppIcon :name="item.icon" :size="24" :color="'#E84F5F'" />
+          <AppIcon :name="item.icon" :size="24" :color="'#FF5C72'" />
         </view>
         <text>{{ item.text }}</text>
         <view class="menu__arrow">›</view>
@@ -86,6 +86,7 @@ export default {
       avatarDisplay: '',
       menus: [
         { icon: 'receipt', text: '我的订单', url: '/pages/order/list/index' },
+        { icon: 'heart', text: '我的收藏', url: '/pages/favorite/index', type: 'navigateTo' },
         { icon: 'store', text: '店长入口', url: '/pages/admin/dashboard/index', type: 'navigateTo' },
         { icon: 'user', text: '登录/注册', url: '/pages/auth/login/index', type: 'navigateTo', guestOnly: true },
         { icon: 'phone', text: '联系客服' },
@@ -252,8 +253,8 @@ export default {
   width: 96rpx;
   height: 96rpx;
   color: #fff;
-  background: $color-primary;
-  border-radius: $radius-md;
+  background: $gradient-primary;
+  border-radius: 50%;
   @include font-base;
   font-size: 34rpx;
   font-weight: $font-weight-heavy;
@@ -287,13 +288,13 @@ export default {
   padding: 8rpx 18rpx;
   color: $color-orange;
   background: $color-orange-light;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
   @include text-caption($color-orange);
 }
 
 .profile__tag--guest {
   color: #fff;
-  background: $color-primary;
+  background: $gradient-primary;
   font-weight: 600;
 }
 
@@ -357,7 +358,9 @@ export default {
 
 .mode-switch__btn--active {
   color: #fff;
-  background: $color-primary;
+  background: $gradient-primary;
+  border-color: transparent;
+  box-shadow: $shadow-btn;
   border-color: transparent;
   box-shadow: none;
 }

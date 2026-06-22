@@ -72,8 +72,7 @@ export default {
         { key: 'all', text: '全部' },
         { key: 'pendingDelivery', text: '待配送' },
         { key: 'delivering', text: '配送中' },
-        { key: 'completed', text: '已完成' },
-        { key: 'cancelled', text: '已取消' }
+        { key: 'finished', text: '已结束' }
       ],
       loadSeq: 0
     }
@@ -100,15 +99,18 @@ export default {
   },
   computed: {
     filteredOrders() {
-      return this.active === 'all' ? this.orders : this.orders.filter(item => item.status === this.active)
+      if (this.active === 'all') return this.orders
+      if (this.active === 'finished') return this.orders.filter(item => ['completed', 'cancelled'].includes(item.status))
+      return this.orders.filter(item => item.status === this.active)
     }
   },
   methods: {
     cardActionText(order) {
       if (['paid', 'pendingDelivery'].includes(order.status)) return '取消订单'
+      if (order.refundStatus === 'pending') return '退款处理中'
       if (order.status === 'delivering') return '查看物流'
-      if (order.status === 'completed') return '再次购买'
-      if (order.status === 'cancelled') return '申请退款'
+      if (order.status === 'completed') return '申请退款'
+      if (order.status === 'cancelled') return '再次购买'
       return '查看进度'
     },
     async loadOrders() {
@@ -119,9 +121,14 @@ export default {
       this.orders = orders
       this.tabs = this.tabs.map(tab => ({
         ...tab,
-        count: tab.key === 'all' ? this.orders.length : this.orders.filter(item => item.status === tab.key).length
+        count: this.getTabCount(tab.key)
       }))
       this.loading = false
+    },
+    getTabCount(key) {
+      if (key === 'all') return this.orders.length
+      if (key === 'finished') return this.orders.filter(item => ['completed', 'cancelled'].includes(item.status)).length
+      return this.orders.filter(item => item.status === key).length
     },
     viewOrder(order) {
       uni.navigateTo({ url: `/pages/order/detail/index?id=${order.id}` })
@@ -142,18 +149,21 @@ export default {
         this.viewLogistics(order)
         return
       }
+      if (order.refundStatus === 'pending') {
+        uni.showToast({ title: '退款申请处理中', icon: 'none' })
+        return
+      }
       if (order.status === 'completed') {
+        uni.navigateTo({ url: `/pages/order/refund/index?id=${order.id}` })
+        return
+      }
+      if (order.status === 'cancelled') {
         // 再次购买：先检查商品是否上架
         if (order.items && order.items.length && order.items[0].productId) {
           uni.navigateTo({ url: `/pages/product/detail?id=${order.items[0].productId}` })
         } else {
           uni.showToast({ title: '商品已下架', icon: 'none' })
         }
-        return
-      }
-      if (order.status === 'cancelled') {
-        // 已取消订单：跳转退款页面
-        uni.navigateTo({ url: `/pages/order/refund/index?id=${order.id}` })
         return
       }
       this.viewOrder(order)
@@ -201,36 +211,43 @@ export default {
 
 .buyer-orders {
   padding-bottom: 180rpx;
+  overflow-x: hidden;
 }
 
 .order-tabs {
+  width: 100%;
+  box-sizing: border-box;
   margin: 20rpx 0 22rpx;
   padding: 18rpx;
   white-space: nowrap;
+  overflow: hidden;
 }
 
 .order-tabs__inner {
-  display: inline-flex;
+  display: flex;
   gap: 14rpx;
+  width: max-content;
+  min-width: 100%;
 }
 
 .order-tab {
   @include flex-center;
   flex: 0 0 auto;
-  min-width: 128rpx;
+  min-width: 118rpx;
   height: 64rpx;
-  padding: 0 20rpx;
+  padding: 0 18rpx;
+  box-sizing: border-box;
   color: $color-text-regular;
-  background: $color-bg-light;
+  background: #fff;
   border: 1rpx solid $color-border-light;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
   font-size: 26rpx;
 }
 
 .order-tab.active {
   color: $color-primary;
   background: $color-primary-light;
-  border-color: rgba(232,79,95,.18);
+  border-color: rgba(255,92,114,.20);
   font-weight: 800;
 }
 

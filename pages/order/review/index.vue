@@ -115,8 +115,8 @@ export default {
 @import '@/common/theme.scss';
 
 .review-page { min-height: 100vh; padding: 0 24rpx 180rpx; background: $gradient-page; }
-.card { margin-top: 24rpx; padding: 28rpx; background: #fff; border-radius: $radius-card; box-shadow: $shadow-card; }
-.order-summary { @include text-caption; font-size: 24rpx; }
+.card { margin-top: 24rpx; padding: 28rpx; background: $color-card; border: 1rpx solid $color-border-light; border-radius: $radius-card; box-shadow: $shadow-card; }
+.order-summary { @include text-caption; font-size: 24rpx; background: $gradient-cream; }
 .order-summary text { display: block; padding: 6rpx 0; }
 
 .rating-card__title { @include text-card-title; font-size: 30rpx; font-weight: $font-weight-heavy; margin-bottom: 20rpx; }
@@ -127,15 +127,27 @@ export default {
 
 .tag-card__title { @include text-card-title; font-size: 30rpx; font-weight: $font-weight-heavy; margin-bottom: 20rpx; }
 .tag-list { display: flex; flex-wrap: wrap; gap: 16rpx; }
-.tag-item { padding: 14rpx 24rpx; background: $color-bg-light; border: 1rpx solid $color-border; border-radius: $radius-pill; font-size: 26rpx; }
+.tag-item { padding: 14rpx 24rpx; color: $color-text-regular; background: $color-bg-light; border: 1rpx solid $color-border; border-radius: $radius-pill; font-size: 26rpx; }
 .tag-item--active { color: $color-primary; background: $color-primary-light; border-color: $color-primary; }
 
 .comment-card__title { @include text-card-title; font-size: 30rpx; font-weight: $font-weight-heavy; margin-bottom: 20rpx; }
-textarea { width: 100%; height: 200rpx; padding: 16rpx; border: 1rpx solid $color-border; border-radius: 16rpx; font-size: 26rpx; line-height: 1.6; }
+textarea { width: 100%; height: 220rpx; padding: 18rpx; color: $color-text-main; background: $color-bg-light; border: 1rpx solid $color-border; border-radius: $radius-card; font-size: 26rpx; line-height: 1.6; box-sizing: border-box; }
 .counter { margin-top: 8rpx; text-align: right; font-size: 22rpx; color: $color-text-light; }
 
-.bottom-actions { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 20rpx; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255,255,255,0.98); border-top: 1rpx solid $color-border-light; }
+.bottom-actions { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 20rpx; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 253, 249, 0.98); border-top: 1rpx solid $color-border-light; box-shadow: $shadow-footer; }
 .ghost-btn, .primary-btn { @include flex-center; flex: 1; height: 88rpx; margin: 0; border-radius: $radius-pill; font-size: 30rpx; font-weight: $font-weight-bold; }
-.ghost-btn { color: $color-text-main; background: #fff; border: 1rpx solid $color-border; }
+.ghost-btn { color: $color-text-main; background: $color-card; border: 1rpx solid $color-border; }
 .primary-btn { color: #fff; background: $gradient-primary; border: none; }
+
+@media screen and (max-width: 430px) {
+  .star-row {
+    justify-content: space-between;
+    gap: 0;
+  }
+
+  .tag-item {
+    flex: 1 0 calc(50% - 16rpx);
+    text-align: center;
+  }
+}
 </style>

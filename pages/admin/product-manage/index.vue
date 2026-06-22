@@ -248,6 +248,13 @@ export default {
   color: $color-orange;
 }
 
+@media screen and (max-width: 430px) {
+  .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 22rpx;
+  }
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -298,7 +305,7 @@ export default {
 .toolbar__tab--active {
   color: $color-primary;
   background: $color-primary-light;
-  border-color: rgba(232,79,95,.18);
+  border-color: rgba(255,92,114,.20);
   font-weight: 800;
 }
 

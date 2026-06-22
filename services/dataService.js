@@ -2,7 +2,7 @@
  * 数据服务层
  * 微信云开发模式
  */
-import { productAPI, orderAPI, groupAPI, stockAPI, statsAPI, shopAPI, addressAPI, bannerAPI, routeAPI } from './apiClient'
+import { productAPI, orderAPI, groupAPI, stockAPI, statsAPI, shopAPI, addressAPI, bannerAPI, notificationAPI } from './apiClient'
 import { refreshAuthState, getAuthSession } from '@/utils/auth'
 import { IMAGE_ASSETS, normalizeGroupImages, normalizeImageList, normalizeImageUrl, resolveImageList, resolveImageUrl } from '@/utils/image'
 import { getDefaultBannerConfig, normalizeBannerConfig } from '@/utils/bannerConfig'
@@ -61,6 +61,16 @@ function relativeTimeText(value) {
   return `${Math.floor(hours / 24)}天前`
 }
 
+function isToday(value) {
+  if (!value) return false
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return false
+  const nowDate = new Date()
+  return date.getFullYear() === nowDate.getFullYear() &&
+    date.getMonth() === nowDate.getMonth() &&
+    date.getDate() === nowDate.getDate()
+}
+
 function statusMeta(status = '', deliveryStatus = '') {
   if (status === 'completed' || deliveryStatus === 'completed') return { status: 'completed', statusText: '已完成', payStatusText: '已付款' }
   if (status === 'delivering' || deliveryStatus === 'delivering') return { status: 'delivering', statusText: '已发货', payStatusText: '已付款' }
@@ -89,6 +99,8 @@ function buildProgress(order) {
 
 function normalizeProduct(row = {}) {
   row = row || {}
+  const rawLimit = Number(row.limit || 0)
+  const limit = rawLimit > 1 ? rawLimit : 5
   const imageFileID = normalizeImageUrl(row.imageFileID || row.image, IMAGE_ASSETS.product)
   const bannerImageFileID = normalizeImageUrl(row.bannerImageFileID || row.bannerImage || row.image, imageFileID)
   const galleryFileIDs = normalizeImageList(row.galleryFileIDs || row.gallery, bannerImageFileID)
@@ -113,7 +125,7 @@ function normalizeProduct(row = {}) {
     sold: Number(row.sold || 0),
     stock: Number(row.stock || 0),
     totalStock: Number(row.totalStock || row.stock || 0),
-    limit: Number(row.limit || 5)
+    limit
   }
 }
 
@@ -140,7 +152,7 @@ function normalizeOrder(row = {}, productMap = {}) {
     statusText: meta.statusText,
     payStatus: row.payStatus || 'paid',
     payStatusText: meta.payStatusText,
-    customer: address.receiver || row.customer || '初炉用户',
+    customer: row.customer || address.receiver || '初炉用户',
     receiver: address.receiver || row.receiver || '初炉用户',
     phone: address.phone || row.phone || '',
     fullPhone: address.phone || row.fullPhone || '',
@@ -151,6 +163,7 @@ function normalizeOrder(row = {}, productMap = {}) {
     deliveryFee: Number(row.deliveryFee || 0),
     discount: Number(row.discount || 0),
     payable: Number(row.payable || row.amount || 0),
+    createdAt: row.createdAt || row.createDateTime || row.createTime || '',
     createTime: dateText(row.createdAt, row.createTime),
     createDateTime: dateTimeText(row.createdAt, row.createDateTime),
     payMethod: row.payMethod || '微信支付',
@@ -159,7 +172,12 @@ function normalizeOrder(row = {}, productMap = {}) {
     fulfillmentMethod: row.fulfillmentMethod || row.shippingMethod || '快递发货',
     trackingNo: row.trackingNo || '',
     note: row.note || '无',
-    avatar: row.avatar || 'girl',
+    refundStatus: row.refundStatus || '',
+    refundNo: row.refundNo || '',
+    refundAmount: Number(row.refundAmount || 0),
+    refundReasonText: row.refundReasonText || '',
+    avatar: row.avatar || '',
+    avatarText: row.avatarText || '甜',
     items,
     cancelledAt: row.cancelledAt || '',
     progress: buildProgress({ ...row, status: meta.status, deliveryText }),
@@ -181,19 +199,24 @@ function normalizeAddress(row = {}) {
   }
 }
 
-function buildActivities(orders = []) {
-  return orders.slice(0, 6).flatMap(order => {
-    const name = order.receiver || order.customer || '顾客'
+function buildActivities(orders = [], limit = 6) {
+  const activities = orders.flatMap(order => {
+    const name = order.buyerName || order.customer || order.receiver || '初炉用户'
+    const displayName = String(name || '初炉用户')
+    const maskedName = displayName.length > 1 ? `${displayName.slice(0, 1)}*` : displayName
     return (order.items || []).map((item, index) => ({
       id: `${order.id || order.orderNo}_${item.productId || index}`,
-      customer: `${String(name).slice(0, 1)}*`,
-      avatar: ['bear', 'rabbit', 'girl'][index % 3],
+      customer: maskedName,
+      buyerName: displayName,
+      avatar: order.avatar || '',
+      avatarText: order.avatarText || displayName.slice(0, 1) || '甜',
       text: `${relativeTimeText(order.createdAt || order.createDateTime)}团了 ${item.count}份`,
       productId: item.productId,
       productName: item.name,
       timeText: relativeTimeText(order.createdAt || order.createDateTime)
     }))
-  }).slice(0, 6)
+  })
+  return limit ? activities.slice(0, limit) : activities
 }
 
 function normalizeBannerData(config = {}) {
@@ -206,6 +229,23 @@ function normalizeBannerData(config = {}) {
       imageFileID: normalizeImageUrl(item.imageFileID || item.image, IMAGE_ASSETS.banner)
     }))
   }
+}
+
+function extractGroupProducts(groups = []) {
+  return (groups || []).flatMap(group => {
+    const products = Array.isArray(group.products) ? group.products : []
+    return products.map((item, index) => ({
+      ...item,
+      id: item.productId || item.id,
+      productId: item.productId || item.id,
+      deadline: item.deadline || group.deadline,
+      deadlineAt: item.deadlineAt || group.deadlineAt,
+      deliveryTime: item.deliveryTime || group.deliveryTime,
+      deliveryRange: item.deliveryRange || group.deliveryRange,
+      groupId: group.id,
+      sort: Number(item.sort || index + 1)
+    }))
+  }).sort(bySort)
 }
 
 async function hydrateProductImages(product) {
@@ -328,6 +368,11 @@ export async function getActiveGroups() {
   return Promise.all((groups || []).filter(validRow).map(hydrateGroupImages))
 }
 
+export async function getGroupProducts() {
+  const groups = await getActiveGroups()
+  return extractGroupProducts(groups)
+}
+
 export async function updateProductStatus(productId, status) {
   return productAPI.update(productId, { status })
 }
@@ -351,23 +396,29 @@ export async function getDisplayBannerConfigFromCloud() {
 // ==================== 首页 ====================
 export async function getHomeData() {
   try {
-    const [products, orders, bannerConfig] = await Promise.all([
-      productAPI.list({ status: 'active' }),
+    const [orders, bannerConfig, activeGroups] = await Promise.all([
       orderAPI.list({}),
       getBannerConfigFromCloud(),
+      getActiveGroups().catch(() => []),
     ])
 
-    const normalizedProducts = await Promise.all((products || []).filter(validRow).map(row => hydrateProductImages(normalizeProduct(row))))
-    const ordersList = (orders || []).filter(validRow)
+    const normalizedGroups = activeGroups || []
+    const displayProducts = extractGroupProducts(normalizedGroups)
+    const ordersList = await Promise.all((orders || []).filter(validRow).map(o => hydrateOrderImages(normalizeOrder(o))))
     const displayBannerConfig = await hydrateBannerConfigImages(bannerConfig)
+    const currentGroup = normalizedGroups
+      .slice()
+      .sort((a, b) => new Date(a.deadlineAt || 0).getTime() - new Date(b.deadlineAt || 0).getTime())[0]
 
     return {
       source: 'cloud',
       bannerSettings: displayBannerConfig.settings,
       banners: displayBannerConfig.banners,
-      activeProductCount: normalizedProducts.length,
-      products: normalizedProducts,
-      activities: buildActivities(ordersList.map(o => normalizeOrder(o)))
+      activeProductCount: displayProducts.length,
+      products: displayProducts,
+      groupDeadline: currentGroup && currentGroup.deadline,
+      groupDeadlineAt: currentGroup && currentGroup.deadlineAt,
+      activities: buildActivities(ordersList, 6)
     }
   } catch {
     const displayBannerConfig = await hydrateBannerConfigImages(getDefaultBannerConfig())
@@ -385,7 +436,8 @@ export async function getHomeData() {
 // ==================== 订单 ====================
 export async function createOrder(payload) {
   const session = getAuthSession()
-  const buyerId = (session && session.user && session.user.id) || payload.buyerId || ''
+  const user = (session && session.user) || {}
+  const buyerId = user.id || payload.buyerId || ''
   return orderAPI.create({ ...payload, buyerId })
 }
 
@@ -444,11 +496,11 @@ export async function updateOrderStatus(orderId, status) {
   return orderAPI.updateStatus(orderId, status)
 }
 
-export async function getBuyerActivities(productId = '') {
+export async function getBuyerActivities(productId = '', limit = 6) {
   const orders = await orderAPI.list({})
   const normalized = await Promise.all((orders || []).map(o => hydrateOrderImages(normalizeOrder(o))))
-  const activities = buildActivities(normalized).filter(item => !productId || item.productId === productId)
-  return activities
+  const activities = buildActivities(normalized, 0).filter(item => !productId || item.productId === productId)
+  return limit ? activities.slice(0, limit) : activities
 }
 
 // ==================== 地址 ====================
@@ -493,6 +545,10 @@ export async function submitRefundRequest(payload) {
   return orderAPI.createRefund(payload)
 }
 
+export async function handleRefundRequest(orderId, status, remark = '') {
+  return orderAPI.updateRefundStatus({ orderId, status, remark })
+}
+
 // ==================== 店铺配置 ====================
 const DEFAULT_SHOP_CONFIG = {
   name: '初炉',
@@ -514,7 +570,17 @@ const DEFAULT_SHOP_CONFIG = {
   deliveryTime: '次日打包发货',
   fulfillmentMethods: ['快递发货', '门店自提', '同城配送'],
   customerService: '09:00–21:00',
-  checkout: { deliveryTime: '次日打包发货', fulfillmentMethod: '快递发货' },
+  orderTemplateId: '',
+  afterSalesTemplateId: '',
+  checkout: {
+    deliveryTime: '次日打包发货',
+    fulfillmentMethod: '快递发货',
+    notePlaceholder: '口味、偏好或建议等(选填)',
+    serviceText: '新鲜现做，按单打包发货，感谢等待～',
+    payText: '微信支付',
+    deliveryFee: 0,
+    groupDiscount: 0
+  },
   adminHero: { image: IMAGE_ASSETS.banner },
   serviceBadges: [{ text: '严选食材' }, { text: '新鲜现做' }, { text: '明日配送' }],
   operationTips: ['22:00 前完成截单统计', '按快递/自提/同城分拣订单', '及时同步售罄商品和发货状态'],
@@ -564,6 +630,39 @@ export async function saveShopConfigToCloud(config) {
     }
   })
   return { ok: true }
+}
+
+export async function getAdminSubscriptionStatus() {
+  const session = getAuthSession()
+  if (!session || !session.token) return { enabled: false, orderTemplateId: '', afterSalesTemplateId: '', message: '请先登录店长账号' }
+  return notificationAPI.getAdminSubscriptionStatus(session.token)
+}
+
+export async function requestAdminAfterSalesSubscribe() {
+  const session = getAuthSession()
+  if (!session || !session.token) throw new Error('请先登录店长账号')
+  const status = await notificationAPI.getAdminSubscriptionStatus(session.token)
+  const templates = [
+    { type: 'order', templateId: status.orderTemplateId || '' },
+    { type: 'afterSales', templateId: status.afterSalesTemplateId || status.templateId || '' }
+  ].filter(item => item.templateId)
+  if (!templates.length) throw new Error('请先在门店设置中配置下单或售后订阅模板ID')
+  if (typeof uni.requestSubscribeMessage !== 'function') {
+    throw new Error('当前环境不支持订阅消息，请在微信小程序中操作')
+  }
+  const result = await new Promise((resolve, reject) => {
+    uni.requestSubscribeMessage({
+      tmplIds: templates.map(item => item.templateId),
+      success: resolve,
+      fail: reject
+    })
+  })
+  const subscriptions = templates.map(item => ({
+    ...item,
+    accepted: result && result[item.templateId] === 'accept'
+  }))
+  if (!subscriptions.some(item => item.accepted)) throw new Error('未授权消息提醒，暂时无法发送微信服务通知')
+  return notificationAPI.saveAdminSubscription({ subscriptions }, session.token)
 }
 
 export async function getBuyerProfileSummary() {
@@ -655,22 +754,29 @@ export async function updateStockItem(productId, patch) {
 
 // ==================== 管理面板 ====================
 export async function getAdminDashboardData() {
-  const [orders, products, stockData] = await Promise.all([
+  const [orders, stockData, activeGroups] = await Promise.all([
     getAdminOrders('all'),
-    getAdminProducts(),
-    getStockData()
+    getStockData(),
+    getActiveGroups().catch(() => [])
   ])
 
-  const todaySales = orders.reduce((sum, item) => sum + Number(item.payable || 0), 0)
+  const todayOrders = orders.filter(item => isToday(item.createdAt || item.createDateTime || item.createTime))
+  const todaySales = todayOrders.reduce((sum, item) => sum + Number(item.payable || 0), 0)
+  const groupProducts = extractGroupProducts(activeGroups)
+  const refundOrders = orders.filter(item => item.refundStatus === 'pending')
+  const cancelledOrders = orders.filter(item => item.status === 'cancelled')
+  const afterSalesCount = refundOrders.length + cancelledOrders.length
 
   return {
     orders,
-    products,
+    refundOrders,
+    cancelledOrders,
+    products: groupProducts,
     dashboardStats: [
-      { key: 'orders', label: '今日订单', value: orders.length, unit: '单', trend: '+0%', trendType: 'up', icon: 'receipt', theme: 'red' },
-      { key: 'sales', label: '今日销售额', value: todaySales.toFixed(1), unit: '元', trend: '+0%', trendType: 'up', icon: 'yuan', theme: 'orange' },
-      { key: 'delivery', label: '待发货', value: orders.filter(item => item.status === 'pendingDelivery' || item.status === 'paid').length, unit: '单', trend: '+0%', trendType: 'up', icon: 'truck', theme: 'blue' },
-      { key: 'groups', label: '正在开团', value: products.filter(item => item.status === 'active').length, unit: '款', trend: '+0', trendType: 'up', icon: 'users', theme: 'red' }
+      { key: 'orders', label: '今日订单', value: todayOrders.length, unit: '单', trend: '', trendType: 'up', icon: 'receipt', theme: 'red' },
+      { key: 'sales', label: '今日销售额', value: todaySales.toFixed(1), unit: '元', trend: '', trendType: 'up', icon: 'yuan', theme: 'orange' },
+      { key: 'delivery', label: '待发货', value: orders.filter(item => item.status === 'pendingDelivery' || item.status === 'paid').length, unit: '单', trend: '', trendType: 'up', icon: 'truck', theme: 'blue' },
+      { key: 'afterSales', label: '售后/取消', value: afterSalesCount, unit: '单', trend: '', trendType: 'up', icon: 'receipt', theme: 'orange' }
     ],
     stockSummary: stockData.stockSummary
   }
@@ -703,38 +809,6 @@ export async function getAdminStatsData() {
   }
 }
 
-export async function getRouteData() {
-  try {
-    const [routes, orders] = await Promise.all([
-      routeAPI.list(),
-      getAdminOrders('all')
-    ])
-    const orderMap = orders.reduce((map, item) => {
-      map[item.id] = item
-      return map
-    }, {})
-    return (routes || []).map((route, index) => {
-      const orderIds = Array.isArray(route.orderIds) ? route.orderIds : []
-      const routeOrders = orderIds.map(id => orderMap[id]).filter(Boolean)
-      const receiverPreview = routeOrders
-        .slice(0, 3)
-        .map(item => item.receiver || item.customer || item.id)
-        .filter(Boolean)
-        .join('、')
-      return {
-        ...route,
-        id: route.id || route._id || `route_${index}`,
-        orderIds,
-        orderCount: Number(route.orderCount || orderIds.length || routeOrders.length || 0),
-        summary: route.summary || (receiverPreview ? `${receiverPreview}${routeOrders.length > 3 ? '等' : ''}` : '暂无绑定订单'),
-        sort: Number(route.sort || index + 1)
-      }
-    }).sort(bySort)
-  } catch {
-    return []
-  }
-}
-
 export async function getDeliveryData() {
   const orders = await getAdminOrders('all')
   const listData = orders
@@ -752,7 +826,12 @@ export async function getDeliveryData() {
 
   return {
     deliveryOrders: listData,
-    deliveryTabs: listData.length ? [{ key: 'all', text: '全部', count: listData.length }] : [],
+    deliveryTabs: [
+      { key: 'all', text: '全部', count: listData.length },
+      { key: 'pendingDelivery', text: '待发货', count: listData.filter(item => item.status === 'pendingDelivery').length },
+      { key: 'delivering', text: '已发货', count: listData.filter(item => item.status === 'delivering').length },
+      { key: 'completed', text: '已完成', count: listData.filter(item => item.status === 'completed').length }
+    ],
     deliveryOverview: {
       shopName: '初炉',
       pendingCount: listData.filter(item => item.status === 'pendingDelivery').length,
@@ -760,21 +839,6 @@ export async function getDeliveryData() {
       sortText: '按下单顺序'
     }
   }
-}
-
-export async function saveRouteConfig(route) {
-  const { _id, ...safeRoute } = route || {}
-  const orderIds = Array.isArray(safeRoute.orderIds) ? safeRoute.orderIds : []
-  return routeAPI.save({
-    ...safeRoute,
-    orderIds,
-    orderCount: orderIds.length,
-    summary: safeRoute.summary || (orderIds.length ? `已绑定 ${orderIds.length} 单` : '暂无绑定订单')
-  })
-}
-
-export async function deleteRouteConfig(routeId) {
-  return routeAPI.delete(routeId)
 }
 
 // ==================== 用户身份 ====================
@@ -851,8 +915,6 @@ export async function adminAction(action, payload = {}) {
       return { products: await getAdminProducts() }
     case 'getStockData':
       return await getStockData()
-    case 'getRouteData':
-      return { routes: await getRouteData() }
     case 'saveProduct':
       return saveProduct(payload)
     case 'updateProductStatus':
@@ -865,10 +927,6 @@ export async function adminAction(action, payload = {}) {
       return saveBannerConfigToCloud(payload)
     case 'saveShopConfig':
       return saveShopConfigToCloud(payload)
-    case 'saveRoute':
-      return saveRouteConfig(payload)
-    case 'deleteRoute':
-      return deleteRouteConfig(payload.routeId)
     case 'getIdentity':
       return getUserIdentity(true)
     default:

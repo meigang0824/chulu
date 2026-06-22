@@ -23,7 +23,6 @@
 | `orders` | 订单 | 本人读，云函数写 | `openid_created`, `status_created`, `orderNo_unique` |
 | `stock_items` | 备货汇总 | 云函数读写 | `product_unique`, `status_priority` |
 | `stock_logs` | 库存流水 | 云函数读写 | `product_created`, `order` |
-| `delivery_routes` | 配送路线 | 云函数读写 | `date_status`, `driver` |
 | `audit_logs` | 后台审计 | 云函数写 | `operator_created`, `action_created` |
 
 ## 关键字段约束

@@ -79,7 +79,6 @@ async function test(name, fn) {
 async function cleanup() {
   const today = new Date().toISOString().slice(0, 10)
   try { if (createdGroupId) invoke('deleteGroup', { id: createdGroupId }) } catch {}
-  try { invoke('deleteRoute', { id: ids.route }) } catch {}
   try { if (createdOrderId) deleteWhere('orders', { id: createdOrderId }) } catch {}
   try { deleteWhere('stockItems', { productId: ids.product }) } catch {}
   try { deleteWhere('stockItems', { id: `stock_${today}_${ids.product}` }) } catch {}
@@ -237,26 +236,6 @@ try {
     assert('订单标记发货成功', delivering.status === 'delivering')
     const completed = invoke('updateOrderStatus', { id: createdOrderId, status: 'completed' })
     assert('订单标记完成成功', completed.status === 'completed')
-  })
-
-  await test('发货批次新增、编辑、绑定订单与删除', () => {
-    const saved = invoke('saveRouteConfig', {
-      id: ids.route,
-      name: 'Codex测试发货批次',
-      date: new Date().toISOString().slice(0, 10),
-      startTime: '09:00',
-      endTime: '12:00',
-      status: 'planned',
-      orderIds: createdOrderId ? [createdOrderId] : []
-    })
-    assert('发货批次新增成功', saved.id === ids.route)
-    const edited = invoke('saveRouteConfig', { ...saved, name: 'Codex测试发货批次-编辑', status: 'delivering' })
-    assert('发货批次编辑成功', edited.name.includes('编辑'))
-    const routes = invoke('listRoutes')
-    assert('发货批次列表可读取', routes.some(item => item.id === ids.route))
-    invoke('deleteRoute', { id: ids.route })
-    const afterDelete = invoke('listRoutes')
-    assert('发货批次删除成功', !afterDelete.some(item => item.id === ids.route))
   })
 
   await test('统计接口可读取经营数据', () => {

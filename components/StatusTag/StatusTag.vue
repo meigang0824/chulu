@@ -12,7 +12,10 @@ const defaultTextMap = {
   ready: '已备齐',
   priority: '优先',
   normal: '正常',
-  making: '制作中'
+  making: '制作中',
+  refund: '售后中',
+  refundApproved: '已同意退款',
+  refundRejected: '已拒绝售后'
 }
 
 export default {
@@ -55,7 +58,7 @@ export default {
   color: $color-text-regular;
   background: $color-bg-light;
   border: 1rpx solid transparent;
-  border-radius: $radius-sm;
+  border-radius: $radius-pill;
   @include font-base;
   font-size: 24rpx;
   font-weight: $font-weight-semibold;
@@ -67,7 +70,7 @@ export default {
   min-width: 0;
   height: 36rpx;
   padding: 0 12rpx;
-  border-radius: 16rpx;
+  border-radius: $radius-pill;
   font-size: 20rpx;
 }
 
@@ -91,20 +94,23 @@ export default {
 }
 
 .status-tag--completed,
-.status-tag--ready {
+.status-tag--ready,
+.status-tag--refundApproved {
   color: $color-green;
   background: $color-green-light;
 }
 
 .status-tag--normal,
 .status-tag--making,
-.status-tag--preparing {
+.status-tag--preparing,
+.status-tag--refund {
   color: $color-orange;
   background: $color-orange-light;
 }
 
 .status-tag--cancelled,
-.status-tag--hidden {
+.status-tag--hidden,
+.status-tag--refundRejected {
   color: $color-text-light;
   background: $color-bg-deep;
 }

@@ -44,7 +44,7 @@ export default {
   height: 88rpx;
   color: $color-primary;
   background: $color-primary-light;
-  border-radius: $radius-md;
+  border-radius: 50%;
   @include font-base;
   font-size: 42rpx;
   font-weight: $font-weight-heavy;
@@ -73,9 +73,10 @@ export default {
   margin-top: 22rpx;
   padding: 0 26rpx;
   color: #fff;
-  background: $color-primary;
+  background: $gradient-primary;
   border: none;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-btn;
   @include font-base;
   font-size: 26rpx;
   line-height: 68rpx;

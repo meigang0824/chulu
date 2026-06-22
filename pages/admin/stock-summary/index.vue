@@ -218,18 +218,18 @@ export default {
 .filter-wrap { margin-top:18rpx; padding:18rpx; }
 .filter-row { display:flex; align-items:center; justify-content:space-between; gap:14rpx; }
 .category-tabs { display:flex; gap:14rpx; flex:1; min-width:0; }
-.add-btn { flex-shrink:0; min-width:130rpx; height:64rpx; margin:0; padding:0 20rpx; color:#fff; background:$color-primary; border:none; border-radius:$radius-md; font-size:24rpx; line-height:64rpx; }
-.category-tab { @include flex-center; flex:1; height:64rpx; color:$color-text-regular; background:$color-bg-light; border:1rpx solid $color-border-light; border-radius:$radius-md; font-size:26rpx; }
-.category-tab.active { color:$color-primary; background:$color-primary-light; border-color:rgba(232,79,95,.18); font-weight:800; }
+.add-btn { flex-shrink:0; min-width:130rpx; height:64rpx; margin:0; padding:0 20rpx; color:#fff; background:$gradient-primary; border:none; border-radius:$radius-pill; box-shadow:$shadow-btn; font-size:24rpx; line-height:64rpx; }
+.category-tab { @include flex-center; flex:1; height:64rpx; color:$color-text-regular; background:#fff; border:1rpx solid $color-border-light; border-radius:$radius-pill; font-size:26rpx; }
+.category-tab.active { color:$color-primary; background:$color-primary-light; border-color:rgba(255,92,114,.20); font-weight:800; }
 .category-tab__count { margin-left:8rpx; font-size:20rpx; opacity:.8; }
-.search-card { display:flex; align-items:center; height:76rpx; padding:0 24rpx; background:$color-bg-light; border:1rpx solid $color-border-light; border-radius:$radius-md; }
+.search-card { display:flex; align-items:center; height:76rpx; padding:0 24rpx; background:#fff; border:1rpx solid $color-border-light; border-radius:$radius-pill; }
 .search-card text { margin-right:14rpx; color:$color-text-placeholder; font-size:34rpx; }
 .search-card input { flex:1; min-width:0; color:$color-text-main; font-size:28rpx; }
 .search-clear { margin-right:0 !important; margin-left:10rpx; font-size:26rpx !important; }
 .list { margin-top:22rpx; }
 .product-card { display:flex; gap:18rpx; padding:22rpx; border:1rpx solid $color-border-light; }
 .product-card + .product-card { margin-top:18rpx; }
-.product-card__image { width:170rpx; height:170rpx; border-radius:$radius-card; flex-shrink:0; }
+.product-card__image { width:170rpx; height:170rpx; border-radius:24rpx; flex-shrink:0; }
 .product-card__image--loading { background:#f8efe7; }
 .product-card__main { flex:1; min-width:0; }
 .product-card--loading { align-items:center; }
@@ -239,6 +239,6 @@ export default {
 .product-card__meta { display:flex; flex-wrap:wrap; gap:10rpx 16rpx; margin-top:16rpx; color:$color-text-light; font-size:22rpx; }
 .product-card__meta text:first-child { color:$color-primary; font-size:34rpx; font-weight:800; }
 .product-card__actions { display:flex; gap:14rpx; margin-top:18rpx; }
-.ghost-btn { min-width:136rpx; height:64rpx; margin:0; padding:0 18rpx; color:$color-text-main; background:$color-bg-light; border:1rpx solid $color-border; border-radius:$radius-md; font-size:24rpx; line-height:64rpx; }
+.ghost-btn { min-width:136rpx; height:64rpx; margin:0; padding:0 18rpx; color:$color-text-main; background:#fff; border:1rpx solid $color-border; border-radius:$radius-pill; font-size:24rpx; line-height:64rpx; }
 .ghost-btn.danger { color:$color-danger; background:$color-danger-light; border-color:$color-danger; }
 </style>

@@ -44,7 +44,7 @@ export default {
   align-items: center;
   min-width: 0;
   padding: 28rpx 24rpx;
-  background: #fff;
+  background: $color-card;
   border-radius: $radius-card;
   border: 1rpx solid $color-border-light;
   box-shadow: $shadow-card;
@@ -57,7 +57,7 @@ export default {
   height: 72rpx;
   color: #fff;
   background: $color-primary;
-  border-radius: $radius-md;
+  border-radius: 22rpx;
   @include font-base;
   font-size: 34rpx;
   font-weight: $font-weight-heavy;

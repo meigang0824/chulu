@@ -71,7 +71,7 @@ export default {
 
 .filter-bar {
   padding: 18rpx;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 253, 249, 0.92);
   border: 1rpx solid $color-border-light;
   border-radius: $radius-card;
   box-shadow: $shadow-card;
@@ -92,14 +92,14 @@ export default {
   color: $color-text-main;
   background: #fff;
   border: 1rpx solid $color-border-light;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
   font-size: 26rpx;
 }
 
 .filter-bar__tab--active {
   color: $color-primary;
   background: $color-primary-light;
-  border-color: rgba(232,79,95,.18);
+  border-color: rgba(255,92,114,.20);
   font-weight: 700;
 }
 
@@ -111,7 +111,7 @@ export default {
   padding: 0 12rpx;
   color: inherit;
   background: rgba(255, 255, 255, 0.65);
-  border-radius: $radius-sm;
+  border-radius: $radius-pill;
 }
 
 .filter-bar__tools {
@@ -130,7 +130,7 @@ export default {
   padding: 0 24rpx;
   background: #fff;
   border: 1rpx solid $color-border-light;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
 }
 
 .filter-bar__search-icon {
@@ -160,7 +160,7 @@ export default {
   color: $color-text-main;
   background: #fff;
   border: 1rpx solid $color-border;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
   font-size: 28rpx;
 }
 </style>

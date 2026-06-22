@@ -2,12 +2,19 @@
   <view class="order-card" :class="'order-card--' + variant">
     <view class="order-card__head">
       <view class="order-card__id">订单号：{{ order.id }}</view>
-      <view class="order-card__time" v-if="order.createTime">下单时间：{{ order.createTime }}</view>
-      <StatusTag :type="order.status" :text="order.statusText" />
+      <view class="order-card__tags">
+        <StatusTag v-if="order.refundStatus === 'pending'" type="refund" text="售后中" />
+        <StatusTag v-else-if="order.refundStatus === 'approved'" type="refundApproved" text="已同意退款" />
+        <StatusTag v-else-if="order.refundStatus === 'rejected'" type="refundRejected" text="已拒绝售后" />
+        <StatusTag :type="order.status" :text="order.statusText" />
+      </view>
     </view>
 
     <view class="order-card__main">
-      <view class="order-card__avatar">{{ avatarText }}</view>
+      <view class="order-card__avatar">
+        <image v-if="avatarImage" class="order-card__avatar-img" :src="avatarImage" mode="aspectFill" />
+        <text v-else>甜</text>
+      </view>
       <view class="order-card__user">
         <view class="order-card__user-line">
           <text class="order-card__name">{{ order.customer || order.receiver }}</text>
@@ -60,12 +67,14 @@ export default {
         _renderKey: item.productId || item.name || `item_${index}`
       }))
     },
-    avatarText() {
-      const name = this.order.customer || this.order.receiver || '客'
-      return name.slice(0, 1)
+    avatarImage() {
+      const avatar = String(this.order.avatar || this.order.avatarUrl || '').trim()
+      if (!avatar || ['girl', 'bear', 'rabbit'].includes(avatar)) return ''
+      return avatar
     },
     primaryActionText() {
       if (this.actionText) return this.actionText
+      if (this.order.refundStatus === 'pending') return '处理售后'
       if (this.order.status === 'cancelled') return ''
       if (this.order.status === 'completed') return '再来一单'
       if (this.order.status === 'delivering') return '标记完成'
@@ -81,7 +90,7 @@ export default {
 .order-card {
   margin-bottom: 18rpx;
   padding: 22rpx;
-  background: #fff;
+  background: $color-card;
   border-radius: $radius-card;
   border: 1rpx solid $color-border-light;
   box-shadow: $shadow-card;
@@ -90,22 +99,24 @@ export default {
 .order-card__head {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: space-between;
   gap: 18rpx;
   padding-bottom: 16rpx;
-  border-bottom: 1rpx solid $color-border-light;
+  border-bottom: 1rpx dashed $color-border-light;
   @include text-body($font-weight-medium, $color-text-main);
 }
 
 .order-card__id {
-  flex-shrink: 0;
-}
-
-.order-card__time {
   flex: 1;
   min-width: 0;
-  color: $color-text-light;
   @include text-ellipsis;
+}
+
+.order-card__tags {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
 }
 
 .order-card__main {
@@ -119,11 +130,19 @@ export default {
   flex-shrink: 0;
   width: 72rpx;
   height: 72rpx;
-  color: $color-text-main;
-  background: $color-bg-deep;
-  border-radius: $radius-md;
+  overflow: hidden;
+  color: $color-primary;
+  background: linear-gradient(180deg, #fff1f4 0%, #ffe3e8 100%);
+  border: 1rpx solid rgba(255, 92, 114, 0.16);
+  border-radius: 50%;
   font-size: 30rpx;
-  font-weight: 700;
+  font-weight: 900;
+  box-shadow: 0 10rpx 24rpx rgba(255, 92, 114, 0.12);
+}
+
+.order-card__avatar-img {
+  width: 100%;
+  height: 100%;
 }
 
 .order-card__user {
@@ -183,7 +202,7 @@ export default {
   padding: 16rpx;
   border: 1rpx solid $color-border-light;
   border-radius: $radius-card;
-  background: $color-bg-light;
+  background: rgba(255, 248, 239, 0.72);
 }
 
 .order-card__item {
@@ -198,7 +217,7 @@ export default {
   width: 72rpx;
   height: 72rpx;
   margin-right: 12rpx;
-  border-radius: $radius-sm;
+  border-radius: 14rpx;
 }
 
 .order-card__item-info {
@@ -231,7 +250,7 @@ export default {
   color: $color-text-main;
   background: #fff;
   border: 1rpx solid $color-border;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
   @include font-base;
   font-size: 26rpx;
 }
@@ -239,8 +258,9 @@ export default {
 .order-card__btn--primary {
   min-width: 210rpx;
   color: #fff;
-  background: $color-primary;
+  background: $gradient-primary;
   border: none;
+  box-shadow: $shadow-btn;
 }
 
 .order-card--compact-list {

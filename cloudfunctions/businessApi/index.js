@@ -143,6 +143,12 @@ async function authWxLogin(payload) {
     }
     if (a.role !== nextRole) patch.role = nextRole
     if (adminProfile && adminProfile.name && a.displayName !== adminProfile.name) patch.displayName = adminProfile.name
+    if (!adminProfile) {
+      const nextDisplayName = String(payload.displayName || payload.nickName || '').trim()
+      const nextAvatar = String(payload.avatar || payload.avatarUrl || '').trim()
+      if (nextDisplayName && nextDisplayName !== a.displayName) patch.displayName = nextDisplayName
+      if (nextAvatar && nextAvatar !== a.avatar) patch.avatar = nextAvatar
+    }
     if (Object.keys(patch).length) {
       await db.collection('accounts').doc(a._id).update({ data: patch })
     }
@@ -321,7 +327,7 @@ async function createProduct(body) {
     id, name: body.name || '', desc: body.desc || '', categoryKey: body.categoryKey || '',
     price: body.price || 0, originPrice: body.originPrice || 0, stock: body.stock || 0,
     totalStock: body.totalStock || body.stock || 0, sold: body.sold || 0, status: body.status || 'active',
-    image: body.image || '', bannerImage: body.bannerImage || body.image || '', tag: body.tag || '',
+    image: body.image || '', bannerImage: body.bannerImage || body.image || '',
     priority: body.priority ? 1 : 0, limit: body.limit || 5, deadline: body.deadline || '',
     deliveryText: body.deliveryText || '', deliveryRange: body.deliveryRange || '',
     storage: body.storage || '', sort: body.sort || Date.now(),
@@ -349,7 +355,6 @@ async function updateProduct(id, body) {
     status: body.status !== undefined ? body.status : e.status,
     image: body.image !== undefined ? body.image : e.image,
     bannerImage: body.bannerImage !== undefined ? body.bannerImage : e.bannerImage,
-    tag: body.tag !== undefined ? body.tag : e.tag,
     priority: body.priority !== undefined ? (body.priority ? 1 : 0) : e.priority,
     limit: body.limit !== undefined ? body.limit : e.limit,
     deadline: body.deadline !== undefined ? body.deadline : e.deadline,
@@ -379,14 +384,41 @@ async function listOrders(params = {}) {
   if (params.status && params.status !== 'all') query.status = params.status
   if (params.buyerId) query.buyerId = params.buyerId
   const { data } = await db.collection('orders').where(query).orderBy('createdAt', 'desc').limit(1000).get()
-  return data.filter(row => !isPlaceholderDoc(row)).map(r => ({ ...r, _id: r.id, address: safeJson(r.address), items: safeJson(r.items) }))
+  return enrichOrdersWithAccounts(data.filter(row => !isPlaceholderDoc(row)).map(normalizeOrderDoc))
 }
 
 async function getOrder(id) {
   const { data } = await db.collection('orders').where({ id }).limit(1).get()
   if (!data.length) return null
-  const r = data[0]
+  const enriched = await enrichOrdersWithAccounts([normalizeOrderDoc(data[0])])
+  return enriched[0] || null
+}
+
+function normalizeOrderDoc(r = {}) {
   return { ...r, _id: r.id, address: safeJson(r.address), items: safeJson(r.items) }
+}
+
+async function enrichOrdersWithAccounts(orders = []) {
+  const buyerIds = Array.from(new Set((orders || []).map(order => order.buyerId).filter(Boolean)))
+  if (!buyerIds.length) return orders
+  const accountMap = {}
+  for (let i = 0; i < buyerIds.length; i += 20) {
+    const ids = buyerIds.slice(i, i + 20)
+    const { data } = await db.collection('accounts').where({ id: _.in(ids) }).limit(1000).get()
+    for (const account of data || []) {
+      if (!account || !account.id) continue
+      accountMap[account.id] = account
+    }
+  }
+  return orders.map(order => {
+    const account = accountMap[order.buyerId] || {}
+    return {
+      ...order,
+      buyerName: account.displayName || order.buyerName || '',
+      avatar: account.avatar || '',
+      avatarText: account.avatarText || '甜'
+    }
+  })
 }
 
 async function createOrder(body) {
@@ -416,7 +448,9 @@ async function createOrder(body) {
     }
   }
 
-  return await getOrder(id)
+  const createdOrder = await getOrder(id)
+  await sendAfterSalesNotice(createdOrder, 'order')
+  return createdOrder
 }
 
 async function updateOrder(id, body) {
@@ -432,6 +466,13 @@ async function updateOrder(id, body) {
 async function updateOrderStatus(id, status) {
   const { data: docs } = await db.collection('orders').where({ id }).get()
   if (!docs.length) return null
+  const order = docs[0]
+  if (status === 'cancelled') {
+    if (order.status === 'cancelled') return await getOrder(id)
+    if (!['paid', 'pendingDelivery'].includes(order.status)) {
+      throw new Error('当前订单状态不支持取消，请申请售后退款')
+    }
+  }
   const updateData = { status, updatedAt: now() }
   if (status === 'delivering') updateData.deliveryStatus = 'delivering'
   if (status === 'completed') updateData.deliveryStatus = 'completed'
@@ -439,7 +480,6 @@ async function updateOrderStatus(id, status) {
     updateData.deliveryStatus = 'cancelled'
     updateData.cancelledAt = now()
     // 回补库存
-    const order = docs[0]
     const items = safeJson(order.items)
     for (const item of items) {
       const { data: prods } = await db.collection('products').where({ id: item.productId }).limit(1).get()
@@ -451,20 +491,87 @@ async function updateOrderStatus(id, status) {
     }
   }
   for (const d of docs) await db.collection('orders').doc(d._id).update({ data: updateData })
-  return await getOrder(id)
+  const updatedOrder = await getOrder(id)
+  if (status === 'cancelled') await sendAfterSalesNotice({ ...order, ...updatedOrder, ...updateData }, 'cancelled')
+  return updatedOrder
 }
 
 // ==================== 退款 ====================
 async function createRefund(body) {
   const refundId = `rf${Date.now()}`
+  const orderId = String(body.orderId || '').trim()
+  if (!orderId) throw new Error('订单编号不能为空')
+  const { data: orders } = await db.collection('orders').where({ id: orderId }).limit(1).get()
+  const order = orders && orders[0]
+  if (!order) throw new Error('订单不存在')
+  if (order.status === 'cancelled') throw new Error('已取消订单无需申请退款')
+  if (!['delivering', 'completed'].includes(order.status)) throw new Error('当前订单状态不支持申请退款')
+  if (order.refundStatus === 'pending') throw new Error('退款申请已提交，请勿重复申请')
   await db.collection('refunds').add({
     data: {
-      id: refundId, orderId: body.orderId, buyerId: body.buyerId || '',
-      reason: body.reason || '', status: 'pending',
+      id: refundId, refundNo: body.refundNo || refundId, orderId, buyerId: body.buyerId || order.buyerId || '',
+      reason: body.reason || '', reasonText: body.reasonText || '', refundDesc: body.refundDesc || '',
+      contactPhone: body.contactPhone || '', remark: body.remark || '', status: 'pending',
       amount: body.amount || 0, createdAt: now(), updatedAt: now()
     }
   })
+  await db.collection('orders').doc(order._id).update({
+    data: {
+      refundStatus: 'pending',
+      refundNo: body.refundNo || refundId,
+      refundAmount: body.amount || 0,
+      refundReasonText: body.reasonText || '',
+      updatedAt: now()
+    }
+  })
+  await sendAfterSalesNotice({
+    ...order,
+    refundStatus: 'pending',
+    refundNo: body.refundNo || refundId,
+    refundAmount: body.amount || 0,
+    refundReasonText: body.reasonText || '',
+    updatedAt: now()
+  }, 'refund')
   return { id: refundId, status: 'pending' }
+}
+
+async function updateRefundStatus(body = {}) {
+  const orderId = String(body.orderId || '').trim()
+  const status = String(body.status || '').trim()
+  if (!orderId) throw new Error('订单编号不能为空')
+  if (!['approved', 'rejected'].includes(status)) throw new Error('售后处理状态不正确')
+
+  const { data: orders } = await db.collection('orders').where({ id: orderId }).limit(1).get()
+  const order = orders && orders[0]
+  if (!order) throw new Error('订单不存在')
+  if (order.refundStatus !== 'pending') throw new Error('当前订单没有待处理售后')
+
+  const updateData = {
+    refundStatus: status,
+    refundHandledAt: now(),
+    refundHandleRemark: body.remark || '',
+    updatedAt: now()
+  }
+  if (status === 'approved') updateData.payStatus = 'refunded'
+
+  await db.collection('orders').doc(order._id).update({ data: updateData })
+
+  const refundQuery = order.refundNo
+    ? _.or([{ orderId }, { refundNo: order.refundNo }])
+    : { orderId }
+  const { data: refunds } = await db.collection('refunds').where(refundQuery).limit(1000).get()
+  for (const refund of refunds || []) {
+    await db.collection('refunds').doc(refund._id).update({
+      data: {
+        status,
+        handledAt: now(),
+        handleRemark: body.remark || '',
+        updatedAt: now()
+      }
+    })
+  }
+
+  return await getOrder(orderId)
 }
 
 // ==================== 评价 ====================
@@ -671,6 +778,139 @@ async function updateShopConfig(body) {
   return body
 }
 
+// ==================== 订阅消息 ====================
+async function requireAdminSession(authToken) {
+  const auth = await getAccountByToken(authToken)
+  if (!auth || !auth.account || !isAdmin(auth.account.role)) throw new Error('需要店长权限')
+  return auth
+}
+
+async function getAdminSubscriptionStatus(authToken) {
+  const auth = await requireAdminSession(authToken)
+  const config = await getShopConfig()
+  const orderTemplateId = String(config.orderTemplateId || '').trim()
+  const afterSalesTemplateId = String(config.afterSalesTemplateId || '').trim()
+  const openid = auth.session.openid || ''
+  let orderSubscription = null
+  let afterSalesSubscription = null
+  if (openid && (orderTemplateId || afterSalesTemplateId)) {
+    const { data } = await db.collection('adminSubscriptions')
+      .where({ openid, status: 'enabled' })
+      .limit(100)
+      .get()
+    orderSubscription = (data || []).find(item => item.type === 'order' && item.templateId === orderTemplateId)
+    afterSalesSubscription = (data || []).find(item => item.type === 'afterSales' && item.templateId === afterSalesTemplateId)
+  }
+  return {
+    enabled: !!(orderSubscription || afterSalesSubscription),
+    orderEnabled: !!orderSubscription,
+    afterSalesEnabled: !!afterSalesSubscription,
+    orderTemplateId,
+    afterSalesTemplateId,
+    templateId: afterSalesTemplateId,
+    openidBound: !!openid,
+    updatedAt: (orderSubscription || afterSalesSubscription || {}).updatedAt || ''
+  }
+}
+
+async function saveAdminSubscription(authToken, body = {}) {
+  const auth = await requireAdminSession(authToken)
+  const config = await getShopConfig()
+  const wxContext = cloud.getWXContext()
+  const openid = auth.session.openid || wxContext.OPENID || ''
+  if (!openid) throw new Error('当前账号缺少微信 openid，请用微信登录店长账号后再开启提醒')
+  const subscriptions = Array.isArray(body.subscriptions) && body.subscriptions.length
+    ? body.subscriptions
+    : [{ type: body.type || 'afterSales', templateId: body.templateId || config.afterSalesTemplateId, accepted: body.accepted !== false }]
+  const saved = []
+  for (const subscription of subscriptions) {
+    const type = subscription.type === 'order' ? 'order' : 'afterSales'
+    const fallbackTemplateId = type === 'order' ? config.orderTemplateId : config.afterSalesTemplateId
+    const templateId = String(subscription.templateId || fallbackTemplateId || '').trim()
+    if (!templateId) continue
+    const status = subscription.accepted === false ? 'disabled' : 'enabled'
+    const doc = {
+      type,
+      templateId,
+      openid,
+      accountId: auth.account.id,
+      adminName: auth.account.displayName || auth.account.username || '店长',
+      status,
+      updatedAt: now()
+    }
+    const { data } = await db.collection('adminSubscriptions')
+      .where({ openid, type, templateId })
+      .limit(1)
+      .get()
+    if (data && data.length) await db.collection('adminSubscriptions').doc(data[0]._id).update({ data: doc })
+    else await db.collection('adminSubscriptions').add({ data: { ...doc, createdAt: now() } })
+    saved.push(doc)
+  }
+  if (!saved.length) throw new Error('没有可保存的订阅授权')
+  const result = await getAdminSubscriptionStatus(authToken)
+  return { ...result, openidBound: true }
+}
+
+function truncateNoticeValue(value, max = 20) {
+  const text = String(value || '')
+  return text.length > max ? text.slice(0, max) : text
+}
+
+function noticeTimeText(value) {
+  const date = value ? new Date(value) : new Date()
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().replace('T', ' ').slice(0, 16)
+  const y = date.getFullYear()
+  const m = `${date.getMonth() + 1}`.padStart(2, '0')
+  const d = `${date.getDate()}`.padStart(2, '0')
+  const h = `${date.getHours()}`.padStart(2, '0')
+  const min = `${date.getMinutes()}`.padStart(2, '0')
+  return `${y}-${m}-${d} ${h}:${min}`
+}
+
+async function sendAfterSalesNotice(order = {}, scene = 'refund') {
+  try {
+    const config = await getShopConfig()
+    const noticeType = scene === 'order' ? 'order' : 'afterSales'
+    const templateId = String(noticeType === 'order' ? config.orderTemplateId : config.afterSalesTemplateId || '').trim()
+    if (!templateId || !cloud.openapi || !cloud.openapi.subscribeMessage) return
+    const { data: subscriptions } = await db.collection('adminSubscriptions')
+      .where({ type: noticeType, templateId, status: 'enabled' })
+      .limit(100)
+      .get()
+    if (!subscriptions || !subscriptions.length) return
+    const address = parseJson(order.address, {})
+    const customer = order.customer || order.buyerName || address.receiver || order.receiver || '用户'
+    const title = scene === 'order' ? '收到新订单' : scene === 'cancelled' ? '用户取消订单' : '新的售后申请'
+    const amount = Number(order.refundAmount || order.payable || order.amount || 0)
+    const page = scene === 'order'
+      ? `pages/admin/order-detail/index?id=${order.id || order.orderNo || ''}`
+      : scene === 'cancelled'
+      ? 'pages/admin/after-sales/index?active=cancelled'
+      : 'pages/admin/after-sales/index?active=pending'
+    const data = {
+      thing1: { value: truncateNoticeValue(title, 20) },
+      character_string2: { value: truncateNoticeValue(order.id || order.orderNo || order._id || '-', 32) },
+      amount3: { value: `${amount.toFixed(amount % 1 === 0 ? 0 : 1)}元` },
+      thing4: { value: truncateNoticeValue(customer, 20) },
+      time5: { value: noticeTimeText(order.updatedAt || order.cancelledAt || order.createdAt) }
+    }
+    for (const item of subscriptions) {
+      try {
+        await cloud.openapi.subscribeMessage.send({
+          touser: item.openid,
+          templateId,
+          page,
+          data
+        })
+      } catch (error) {
+        console.error('[subscribeMessage.send] failed:', item.openid, error)
+      }
+    }
+  } catch (error) {
+    console.error('[sendAfterSalesNotice] failed:', error)
+  }
+}
+
 // ==================== 地址 ====================
 async function listAddresses(userId) {
   const query = userId ? { userId } : {}
@@ -797,31 +1037,6 @@ async function updateBanners(body) {
   return await listBanners()
 }
 
-// ==================== 路由管理 ====================
-async function listRoutes() {
-  const { data } = await db.collection('deliveryRoutes').orderBy('sort', 'asc').limit(100).get()
-  return data
-}
-
-async function saveRouteConfig(body) {
-  const { _id, ...safeBody } = body || {}
-  const id = safeBody.id || `route${Date.now()}`
-  const routeData = { ...safeBody, id }
-  const { data: existing } = await db.collection('deliveryRoutes').where({ id }).limit(1).get()
-  if (existing.length) {
-    await db.collection('deliveryRoutes').doc(existing[0]._id).update({ data: { ...routeData, updatedAt: now() } })
-  } else {
-    await db.collection('deliveryRoutes').add({ data: { ...routeData, createdAt: now(), updatedAt: now() } })
-  }
-  return routeData
-}
-
-async function deleteRoute(id) {
-  const { data: docs } = await db.collection('deliveryRoutes').where({ id }).get()
-  for (const d of docs) await db.collection('deliveryRoutes').doc(d._id).remove()
-  return { ok: true }
-}
-
 // ==================== 工具函数 ====================
 function safeJson(v) {
   if (!v) return []
@@ -866,6 +1081,7 @@ exports.main = async (event, context) => {
       case 'updateOrder': return { ok: true, data: await updateOrder(payload.id, payload) }
       case 'updateOrderStatus': return { ok: true, data: await updateOrderStatus(payload.id, payload.status) }
       case 'createRefund': return { ok: true, data: await createRefund(payload) }
+      case 'updateRefundStatus': return { ok: true, data: await updateRefundStatus(payload) }
       case 'submitReview': return await submitReview(authToken, payload)
       case 'createReview': return await submitReview(authToken, payload)
 
@@ -888,6 +1104,10 @@ exports.main = async (event, context) => {
       case 'getShopConfig': return { ok: true, data: await getShopConfig() }
       case 'updateShopConfig': return { ok: true, data: await updateShopConfig(payload) }
 
+      // 订阅消息
+      case 'getAdminSubscriptionStatus': return { ok: true, data: await getAdminSubscriptionStatus(authToken) }
+      case 'saveAdminSubscription': return { ok: true, data: await saveAdminSubscription(authToken, payload) }
+
       // 地址
       case 'listAddresses': return { ok: true, data: await listAddresses(payload.userId) }
       case 'getAddress': return { ok: true, data: await getAddress(payload.id) }
@@ -900,11 +1120,6 @@ exports.main = async (event, context) => {
       case 'updateBannerConfig': return { ok: true, data: await updateBannerConfig(payload) }
       case 'listBanners': return { ok: true, data: await listBanners() }
       case 'updateBanners': return { ok: true, data: await updateBanners(payload) }
-
-      // 配送路线
-      case 'listRoutes': return { ok: true, data: await listRoutes() }
-      case 'saveRouteConfig': return { ok: true, data: await saveRouteConfig(payload) }
-      case 'deleteRoute': return await deleteRoute(payload.id)
 
       default:
         return { ok: true, message: `Unknown action: ${action}` }

@@ -25,7 +25,7 @@
           <view class="switch-line__title">设为默认地址</view>
           <view class="switch-line__desc">确认订单时优先使用这条地址</view>
         </view>
-        <switch :checked="form.isDefault" color="#FF4F66" @change="form.isDefault = $event.detail.value" />
+        <switch :checked="form.isDefault" color="#FF5C72" @change="form.isDefault = $event.detail.value" />
       </view>
     </view>
 

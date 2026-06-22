@@ -43,6 +43,18 @@
       }
     },
     {
+      "path": "pages/cart/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/favorite/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/order/success/index",
       "style": {
         "navigationStyle": "custom"
@@ -86,6 +98,12 @@
     },
     {
       "path": "pages/order/review/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/activity/list/index",
       "style": {
         "navigationStyle": "custom"
       }
@@ -133,6 +151,12 @@
           }
         },
         {
+          "path": "after-sales/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
           "path": "order-detail/index",
           "style": {
             "navigationStyle": "custom"
@@ -140,12 +164,6 @@
         },
         {
           "path": "product-manage/index",
-          "style": {
-            "navigationStyle": "custom"
-          }
-        },
-        {
-          "path": "route-manage/index",
           "style": {
             "navigationStyle": "custom"
           }
@@ -206,14 +224,14 @@
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "初炉",
-    "navigationBarBackgroundColor": "#FFF8F0",
-    "backgroundColor": "#FFF8F0"
+    "navigationBarBackgroundColor": "#FFF8EF",
+    "backgroundColor": "#FFF8EF"
   },
   "tabBar": {
     "custom": true,
-    "color": "#6B3A2B",
-    "selectedColor": "#FF4F66",
-    "backgroundColor": "#FFFFFF",
+    "color": "#755747",
+    "selectedColor": "#FF5C72",
+    "backgroundColor": "#FFFDF9",
     "borderStyle": "white",
     "list": [
       {
@@ -223,6 +241,10 @@
       {
         "pagePath": "pages/category/index",
         "text": "商品"
+      },
+      {
+        "pagePath": "pages/cart/index",
+        "text": "购物车"
       },
       {
         "pagePath": "pages/order/list/index",

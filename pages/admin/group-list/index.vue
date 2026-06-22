@@ -209,11 +209,11 @@ export default {
   color: $color-text-regular;
   background: #fff;
   border: 1rpx solid $color-border-light;
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
 }
 .filter-item.active {
   color: $color-primary;
-  border-color: rgba(232,79,95,.18);
+  border-color: rgba(255,92,114,.20);
   background: $color-primary-light;
 }
 
@@ -250,7 +250,7 @@ export default {
 .product-mini image {
   width: 80rpx;
   height: 80rpx;
-  border-radius: $radius-sm;
+  border-radius: 18rpx;
 }
 .product-mini text {
   font-size: 20rpx;
@@ -264,7 +264,7 @@ export default {
   width: 80rpx;
   height: 80rpx;
   background: $color-bg-light;
-  border-radius: 12rpx;
+  border-radius: 18rpx;
   font-size: 22rpx;
   color: $color-text-regular;
 }

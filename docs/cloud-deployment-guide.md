@@ -43,7 +43,6 @@ export const CLOUD_ENV_ID = 'aiwork-8g5erw9d885e24b4'
 - `orders`
 - `stock_items`
 - `stock_logs`
-- `delivery_routes`
 - `audit_logs`
 
 ## 4. 配置权限

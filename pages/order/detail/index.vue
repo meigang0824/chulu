@@ -48,15 +48,22 @@
         <view class="info-row"><text>下单时间</text><view>{{ order.createDateTime }}</view></view>
         <view class="info-row"><text>支付方式</text><view>{{ order.payMethod }}</view></view>
         <view class="info-row"><text>配送时间</text><view>{{ order.deliveryText }}</view></view>
-        <view class="info-row"><text>订单备注</text><view>{{ order.note }}</view></view>
+        <view v-if="noteText" class="info-row"><text>订单备注</text><view>{{ noteText }}</view></view>
       </view>
 
       <view class="progress-card card">
         <view class="section-title">履约进度</view>
         <view class="progress-list">
-          <view class="progress-step" v-for="(step, index) in order.progress" :key="step.key">
-            <view class="progress-step__icon" :class="{ 'progress-step__icon--done': step.done, 'progress-step__icon--active': step.active }">
-              {{ progressIcon(index) }}
+          <view
+            class="progress-step"
+            :class="{ 'progress-step--done': step.done, 'progress-step--active': step.active }"
+            v-for="(step, index) in order.progress"
+            :key="step.key"
+          >
+            <view class="progress-step__rail">
+              <view class="progress-step__icon" :class="{ 'progress-step__icon--done': step.done, 'progress-step__icon--active': step.active }">
+                {{ progressIcon(step, index) }}
+              </view>
             </view>
             <view class="progress-step__text">
               <view>{{ step.text }}</view>
@@ -88,7 +95,7 @@
     <view v-if="!pageLoading && order.id" class="bottom-actions">
       <button v-if="canCancel" class="action-btn action-btn--ghost" @tap="cancelOrder">取消订单</button>
       <button v-if="['delivering', 'completed'].includes(order.status)" class="action-btn action-btn--ghost" @tap="viewLogistics">查看物流</button>
-      <button class="action-btn action-btn--ghost" @tap="goRefund">售后说明</button>
+      <button v-if="canRefund" class="action-btn action-btn--ghost" @tap="goRefund">{{ refundActionText }}</button>
       <button class="action-btn action-btn--ghost" @tap="contact">联系客服</button>
       <button v-if="order.status === 'completed'" class="action-btn action-btn--ghost" @tap="buyAgain">再次购买</button>
       <button v-if="order.status === 'completed'" class="action-btn action-btn--primary" @tap="goReview">去评价</button>
@@ -133,17 +140,27 @@ export default {
     mainItemTag() {
       return '每日配送'
     },
+    noteText() {
+      const note = String(this.order.note || '').trim()
+      if (!note || note === '无' || note === 'undefined' || note === 'null') return ''
+      return note
+    },
     addressInfo() {
       return {
         receiver: this.order.receiver,
         phone: this.order.phone,
         fullPhone: this.order.fullPhone,
-        tag: '默认',
         address: this.order.address
       }
     },
     canCancel() {
       return ['paid', 'pendingDelivery'].includes(this.order.status)
+    },
+    canRefund() {
+      return ['delivering', 'completed'].includes(this.order.status)
+    },
+    refundActionText() {
+      return this.order.refundStatus === 'pending' ? '退款处理中' : '申请退款'
     }
   },
   async onLoad(query) {
@@ -156,8 +173,10 @@ export default {
     this.pageLoading = false
   },
   methods: {
-    progressIcon(index) {
-      return ['1', '2', '3', '4'][index] || String(index + 1)
+    progressIcon(step, index) {
+      if (step.done) return '✓'
+      if (step.active) return String(index + 1)
+      return ''
     },
     itemAmount(item) {
       const total = Number(item.price || 0) * Number(item.count || 0)
@@ -183,12 +202,34 @@ export default {
       })
     },
     contact() {
-      uni.showToast({ title: '客服在线时间 ' + this.shop.customerService, icon: 'none' })
+      const serviceTime = this.shop.customerService || '以门店实际服务时间为准'
+      const phone = String(this.shop.phone || '').replace(/[^\d-]/g, '')
+      if (!phone) {
+        uni.showModal({
+          title: '联系客服',
+          content: `客服时间：${serviceTime}\n暂无客服电话，请稍后再试。`,
+          showCancel: false,
+          confirmText: '知道了'
+        })
+        return
+      }
+      uni.showModal({
+        title: '联系客服',
+        content: `客服时间：${serviceTime}\n客服电话：${phone}`,
+        confirmText: '拨打电话',
+        success: ({ confirm }) => {
+          if (confirm) uni.makePhoneCall({ phoneNumber: phone })
+        }
+      })
     },
     goReview() {
       uni.navigateTo({ url: `/pages/order/review/index?id=${this.order.id || this.order.detailId || ''}` })
     },
     goRefund() {
+      if (this.order.refundStatus === 'pending') {
+        uni.showToast({ title: '退款申请处理中', icon: 'none' })
+        return
+      }
       uni.navigateTo({ url: `/pages/order/refund/index?id=${this.order.id || this.order.detailId || ''}` })
     },
     buyAgain() {
@@ -236,7 +277,7 @@ export default {
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; margin-bottom: 8rpx; }
 .goods-item { display: flex; align-items: center; gap: 18rpx; padding: 20rpx 0; border-bottom: 1rpx solid $color-border-light; }
 .goods-item:last-child { padding-bottom: 0; border-bottom: none; }
-.goods-item__image { flex-shrink: 0; width: 112rpx; height: 112rpx; border-radius: $radius-md; background: $color-bg-deep; }
+.goods-item__image { flex-shrink: 0; width: 112rpx; height: 112rpx; border-radius: 22rpx; background: $color-bg-deep; }
 .goods-item__info { flex: 1; min-width: 0; }
 .goods-item__name { color: $color-text-main; font-size: 28rpx; font-weight: 700; line-height: 1.35; @include multi-ellipsis(2); }
 .goods-item__info text { display: block; margin-top: 10rpx; color: $color-text-light; font-size: 24rpx; }
@@ -247,7 +288,7 @@ export default {
 .info-row { display: flex; justify-content: space-between; gap: 24rpx; padding-top: 18rpx; color: $color-text-regular; font-size: 28rpx; line-height: 1.45; }
 .info-row text { flex-shrink: 0; color: $color-text-main; }
 .info-row view { min-width: 0; text-align: right; }
-.info-row button { display: inline-flex; align-items: center; justify-content: center; height: 42rpx; margin-left: 12rpx; padding: 0 14rpx; color: $color-orange; background: #fff; border: 1rpx solid $color-orange; border-radius: 10rpx; font-size: 22rpx; }
+.info-row button { display: inline-flex; align-items: center; justify-content: center; height: 42rpx; margin-left: 12rpx; padding: 0 14rpx; color: $color-orange; background: #fff; border: 1rpx solid $color-orange; border-radius: $radius-pill; font-size: 22rpx; }
 
 .amount-row, .amount-total { display: flex; justify-content: space-between; gap: 24rpx; padding-top: 18rpx; color: $color-text-regular; font-size: 26rpx; line-height: 1.35; }
 .amount-row:first-child { padding-top: 0; }
@@ -257,14 +298,20 @@ export default {
 .amount-total text { font-size: 30rpx; font-weight: 800; }
 .amount-total view { color: $color-primary; font-size: 42rpx; font-weight: 800; }
 
-.progress-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12rpx; }
-.progress-step { min-width: 0; text-align: center; }
-.progress-step__icon { @include flex-center; width: 62rpx; height: 62rpx; margin: 0 auto; color: $color-text-light; background: $color-bg-deep; border-radius: $radius-md; font-size: 24rpx; font-weight: 800; }
-.progress-step__icon--done { color: #fff; background: $color-primary; }
-.progress-step__icon--active { color: #fff; background: $color-orange; }
-.progress-step__text { margin-top: 14rpx; }
-.progress-step__text view { color: $color-text-main; font-size: 24rpx; font-weight: 700; line-height: 1.3; }
-.progress-step__text text { display: block; margin-top: 6rpx; color: $color-text-light; font-size: 21rpx; line-height: 1.35; @include multi-ellipsis(2); }
+.progress-list { display: flex; flex-direction: column; padding-top: 4rpx; }
+.progress-step { position: relative; display: flex; align-items: flex-start; gap: 18rpx; min-width: 0; padding-bottom: 26rpx; }
+.progress-step:last-child { padding-bottom: 0; }
+.progress-step__rail { position: relative; flex-shrink: 0; display: flex; justify-content: center; width: 62rpx; }
+.progress-step__rail::after { content: ''; position: absolute; top: 68rpx; bottom: -26rpx; left: 50%; width: 2rpx; background: $color-border-light; transform: translateX(-50%); }
+.progress-step:last-child .progress-step__rail::after { display: none; }
+.progress-step--done .progress-step__rail::after { background: rgba(255, 92, 114, 0.26); }
+.progress-step__icon { position: relative; z-index: 1; @include flex-center; width: 62rpx; height: 62rpx; color: $color-text-placeholder; background: $color-bg-deep; border: 1rpx solid $color-border-light; border-radius: 50%; font-size: 24rpx; font-weight: 800; }
+.progress-step__icon--done { color: #fff; background: $gradient-primary; border-color: transparent; box-shadow: 0 8rpx 18rpx rgba(255, 92, 114, 0.14); }
+.progress-step__icon--active { color: #fff; background: $color-orange; border-color: transparent; box-shadow: 0 8rpx 18rpx rgba(200, 121, 50, 0.16); }
+.progress-step__text { flex: 1; min-width: 0; padding: 16rpx 18rpx; background: $color-bg-light; border: 1rpx solid $color-border-light; border-radius: $radius-card; }
+.progress-step--active .progress-step__text { background: $color-orange-light; border-color: rgba(200, 121, 50, 0.2); }
+.progress-step__text view { color: $color-text-main; font-size: 27rpx; font-weight: 800; line-height: 1.3; }
+.progress-step__text text { display: block; margin-top: 6rpx; color: $color-text-light; font-size: 23rpx; line-height: 1.35; @include multi-ellipsis(2); }
 
 .driver-card { padding: 24rpx; }
 .driver-card__title { @include text-card-title; font-size: 28rpx; font-weight: $font-weight-heavy; margin-bottom: 16rpx; }
@@ -274,16 +321,15 @@ export default {
 .driver-card__value { color: $color-text-main; font-size: 26rpx; font-weight: $font-weight-medium; }
 .driver-card__phone { margin-left: 16rpx; color: $color-primary; text-decoration: underline; }
 
-.assurance { display: flex; flex-wrap: wrap; gap: 12rpx; justify-content: space-between; margin-top: 20rpx; padding: 22rpx 28rpx; color: $color-text-main; background: $color-orange-light; border: 1rpx solid #f1ddc6; border-radius: $radius-card; font-size: 26rpx; }
+.assurance { display: flex; flex-wrap: wrap; gap: 12rpx; justify-content: space-between; margin-top: 20rpx; padding: 22rpx 28rpx; color: $color-text-main; background: $color-orange-light; border: 1rpx solid rgba(200, 121, 50, 0.18); border-radius: $radius-card; font-size: 26rpx; }
 .assurance text { color: $color-primary; font-weight: 700; }
 
-.bottom-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) 1.35fr; gap: 12rpx; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.98); border-top: 1rpx solid $color-border-light; box-shadow: $shadow-bottom; }
-.action-btn { @include flex-center; min-width: 0; height: 78rpx; margin: 0; padding: 0 10rpx; border-radius: $radius-md; font-size: 24rpx; font-weight: 700; line-height: 1.2; }
+.bottom-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) 1.35fr; gap: 12rpx; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 253, 249, 0.98); border-top: 1rpx solid $color-border-light; box-shadow: $shadow-bottom; }
+.action-btn { @include flex-center; min-width: 0; height: 78rpx; margin: 0; padding: 0 10rpx; border-radius: $radius-pill; font-size: 24rpx; font-weight: 700; line-height: 1.2; }
 .action-btn--ghost { color: $color-text-main; background: #fff; border: 1rpx solid $color-border; }
 .action-btn--primary { color: #fff; background: $gradient-primary; border: none; box-shadow: $shadow-btn; }
 
-@media screen and (max-width: 360px) {
-  .progress-list { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 22rpx; }
+@media screen and (max-width: 430px) {
   .bottom-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .action-btn--primary { grid-column: span 2; }
 }

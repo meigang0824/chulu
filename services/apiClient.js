@@ -57,6 +57,7 @@ export const orderAPI = {
   update: (id, data) => callBusinessApi('updateOrder', { id, ...data }),
   updateStatus: (id, status) => callBusinessApi('updateOrderStatus', { id, status }),
   createRefund: (data) => callBusinessApi('createRefund', data),
+  updateRefundStatus: (data) => callBusinessApi('updateRefundStatus', data),
 }
 
 // ==================== 团购 ====================
@@ -86,6 +87,12 @@ export const shopAPI = {
   update: (data) => callBusinessApi('updateShopConfig', data),
 }
 
+// ==================== 消息订阅 ====================
+export const notificationAPI = {
+  getAdminSubscriptionStatus: (authToken = '') => callBusinessApi('getAdminSubscriptionStatus', {}, authToken),
+  saveAdminSubscription: (data = {}, authToken = '') => callBusinessApi('saveAdminSubscription', data, authToken),
+}
+
 // ==================== 地址 ====================
 export const addressAPI = {
   list: (userId) => callBusinessApi('listAddresses', userId ? { userId } : {}),
@@ -101,13 +108,6 @@ export const bannerAPI = {
   updateConfig: (data) => callBusinessApi('updateBannerConfig', data),
   list: () => callBusinessApi('listBanners'),
   update: (data) => callBusinessApi('updateBanners', data),
-}
-
-// ==================== 配送路线 ====================
-export const routeAPI = {
-  list: () => callBusinessApi('listRoutes'),
-  save: (data) => callBusinessApi('saveRouteConfig', data),
-  delete: (id) => callBusinessApi('deleteRoute', { id }),
 }
 
 // ==================== 兼容旧 callFunction 调用 ====================

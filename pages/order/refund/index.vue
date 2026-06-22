@@ -150,11 +150,21 @@ export default {
         this.order = result
         this.form.refundAmount = String(result.payable || result.amount || '')
         this.form.contactPhone = result.fullPhone || result.phone || ''
+        if (result.refundStatus === 'pending') {
+          this.submitted = true
+          this.refundNo = result.refundNo || ''
+          this.form.refundAmount = String(result.refundAmount || result.payable || result.amount || '')
+          this.reasonText = result.refundReasonText || '退款申请处理中'
+        }
       }
     }
   },
   methods: {
     validate() {
+      if (!['delivering', 'completed'].includes(this.order.status)) {
+        return this.order.status === 'cancelled' ? '已取消订单无需申请退款' : '当前订单还未配送，如需取消请直接取消订单'
+      }
+      if (this.order.refundStatus === 'pending') return '退款申请已提交，请勿重复申请'
       if (!this.form.refundReason) return '请选择退款原因'
       if (this.form.refundReason === 'other' && !this.form.refundDesc.trim()) return '请填写具体原因'
       const amount = Number(this.form.refundAmount)
@@ -246,10 +256,10 @@ export default {
 }
 .reason-item--active { color: $color-primary; background: $color-primary-light; border-color: $color-primary; font-weight: $font-weight-semibold; }
 
-textarea { width: 100%; height: 120rpx; padding: 16rpx; border: 1rpx solid $color-border; border-radius: 16rpx; @include text-body; font-size: 26rpx; }
+textarea { width: 100%; height: 120rpx; padding: 16rpx; border: 1rpx solid $color-border; border-radius: $radius-card; @include text-body; font-size: 26rpx; }
 .counter { margin-top: 8rpx; text-align: right; @include text-caption; font-size: 22rpx; }
 
-.amount-input { display: flex; align-items: center; height: 88rpx; padding: 0 24rpx; border: 1rpx solid $color-border; border-radius: 16rpx; background: #fff; }
+.amount-input { display: flex; align-items: center; height: 88rpx; padding: 0 24rpx; border: 1rpx solid $color-border; border-radius: $radius-pill; background: #fff; }
 .amount-prefix { @include text-price(40rpx); margin-right: 8rpx; }
 .amount-input input { flex: 1; @include text-price(40rpx); }
 .amount-tip { margin-top: 12rpx; display: block; @include text-caption; font-size: 22rpx; }
@@ -260,7 +270,7 @@ textarea { width: 100%; height: 120rpx; padding: 16rpx; border: 1rpx solid $colo
 .policy__item { margin-top: 12rpx; @include text-body($font-weight-regular, $color-text-regular); font-size: 24rpx; line-height: 1.6; }
 
 // 底部
-.bottom-actions { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 20rpx; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.98); border-top: 1rpx solid $color-border-light; }
+.bottom-actions { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 20rpx; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 253, 249, 0.98); border-top: 1rpx solid $color-border-light; }
 .ghost-btn, .primary-btn { @include flex-center; flex: 1; height: 88rpx; margin: 0; border-radius: $radius-pill; font-size: 30rpx; font-weight: $font-weight-bold; }
 .ghost-btn { color: $color-text-main; background: #fff; border: 1rpx solid $color-border; }
 .primary-btn { color: #fff; background: $gradient-primary; border: none; }

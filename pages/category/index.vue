@@ -6,19 +6,22 @@
       <input v-model="keyword" placeholder="搜索商品名称、口味或食材" />
       <text v-if="keyword" class="search-card__clear" @tap="keyword = ''">×</text>
     </view>
-    <scroll-view scroll-x class="category-scroll card" show-scrollbar="false">
-      <view class="category-tabs">
-        <view
-          v-for="item in categories"
-          :key="item.key"
-          class="category-tab"
-          :class="{ active: active === item.key }"
-          @tap="active = item.key"
-        >
-          {{ item.text }}
+    <view class="category-scroll card">
+      <view class="category-scroll__fade"></view>
+      <scroll-view scroll-x class="category-scroll__body" show-scrollbar="false">
+        <view class="category-tabs">
+          <view
+            v-for="item in categories"
+            :key="item.key"
+            class="category-tab"
+            :class="{ active: active === item.key }"
+            @tap="active = item.key"
+          >
+            {{ item.text }}
+          </view>
         </view>
-      </view>
-    </scroll-view>
+      </scroll-view>
+    </view>
     <view class="list-tools">
       <view class="list-tools__count">共 {{ filteredProducts.length }} 款商品</view>
       <view class="sort-tabs">
@@ -34,8 +37,8 @@
     <view class="product-list">
       <EmptyState
         v-if="!filteredProducts.length"
-        title="暂时没有匹配商品"
-        desc="换个关键词，或者看看其他商品。"
+        :title="emptyTitle"
+        :desc="emptyDesc"
       />
       <ProductCard
         v-else
@@ -58,7 +61,7 @@ import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import ProductCard from '@/components/ProductCard/ProductCard.vue'
 import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import BuyerTabBar from '@/components/BuyerTabBar/BuyerTabBar.vue'
-import { getCategories, getProducts } from '@/services/dataService'
+import { getCategories, getGroupProducts } from '@/services/dataService'
 
 export default {
   components: { CustomNavBar, ProductCard, EmptyState, BuyerTabBar },
@@ -97,11 +100,17 @@ export default {
       if (this.sortKey === 'price') sorted.sort((a, b) => Number(a.price || 0) - Number(b.price || 0))
       if (this.sortKey === 'stock') sorted.sort((a, b) => Number(a.stock || 0) - Number(b.stock || 0))
       return sorted
+    },
+    emptyTitle() {
+      return this.products.length ? '暂时没有匹配商品' : '当前暂无开团商品'
+    },
+    emptyDesc() {
+      return this.products.length ? '换个关键词，或者看看其他商品。' : '店长发布团购后，这里会展示可购买商品。'
     }
   },
   methods: {
     async loadPageData() {
-      const [products, categories] = await Promise.all([getProducts(), getCategories()])
+      const [products, categories] = await Promise.all([getGroupProducts(), getCategories()])
       this.products = products
       this.categories = categories
     },
@@ -125,6 +134,8 @@ export default {
   height: 82rpx;
   margin-top: 20rpx;
   padding: 0 26rpx;
+  background: $color-card;
+  border-radius: $radius-pill;
 }
 
 .search-card text {
@@ -148,33 +159,58 @@ export default {
 }
 
 .category-scroll {
+  position: relative;
   margin-top: 20rpx;
-  padding: 18rpx;
+  padding: 16rpx 18rpx;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.category-scroll__fade {
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 2;
+  width: 54rpx;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), $color-card 76%);
+  pointer-events: none;
+}
+
+.category-scroll__body {
+  width: 100%;
   white-space: nowrap;
 }
 
 .category-tabs {
   display: inline-flex;
-  gap: 14rpx;
+  gap: 10rpx;
+  padding-right: 52rpx;
 }
 
 .category-tab {
   @include flex-center;
   flex: 0 0 auto;
-  min-width: 132rpx;
-  height: 64rpx;
-  padding: 0 22rpx;
+  min-width: 104rpx;
+  max-width: 188rpx;
+  height: 56rpx;
+  padding: 0 18rpx;
   color: $color-text-regular;
-  background: $color-bg-light;
+  background: #fff;
   border: 1rpx solid $color-border-light;
-  border-radius: $radius-md;
-  font-size: 26rpx;
+  border-radius: $radius-pill;
+  font-size: 24rpx;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .category-tab.active {
   color: $color-primary;
   background: $color-primary-light;
-  border-color: rgba(232, 79, 95, 0.18);
+  border-color: rgba(255, 92, 114, 0.20);
   font-weight: 800;
 }
 
@@ -205,14 +241,14 @@ export default {
   color: $color-text-regular;
   background: $color-card;
   border: 1rpx solid $color-border-light;
-  border-radius: $radius-sm;
+  border-radius: $radius-pill;
   font-size: 23rpx;
 }
 
 .sort-tab.active {
   color: $color-primary;
   background: $color-primary-light;
-  border-color: rgba(232, 79, 95, 0.18);
+  border-color: rgba(255, 92, 114, 0.20);
   font-weight: 700;
 }
 

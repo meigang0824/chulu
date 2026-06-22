@@ -47,7 +47,7 @@
           <view class="form-label">运营设置</view>
           <text>在商品详情页显示购买动态</text>
         </view>
-        <switch :checked="form.showActivity" color="#E84F5F" @change="form.showActivity = $event.detail.value" />
+        <switch :checked="form.showActivity" color="#FF5C72" @change="form.showActivity = $event.detail.value" />
       </view>
     </view>
 
@@ -185,7 +185,6 @@ export default {
           stock: Number(this.form.stock),
           totalStock: Number(this.form.stock),
           limit: 5,
-          tag: '明日配送',
           deadline: '今日 22:00 截单',
           deliveryTime: '次日打包发货',
           deliveryRange: '快递发货 / 门店自提 / 同城配送',
@@ -280,7 +279,7 @@ export default {
 .preview-product__price text { color: $color-primary; font-size: 34rpx; font-weight: 800; }
 .preview-product__price .origin { color: $color-text-light; font-size: 24rpx; text-decoration: line-through; font-weight: 400; }
 .preview-product__stock { margin-top: 8rpx; font-size: 24rpx; color: $color-text-regular; }
-.bottom-action { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255,255,255,.98); box-shadow: $shadow-bottom; border-top: 1rpx solid $color-border-light; }
-.bottom-action button { width: 100%; height: 88rpx; color: #fff; background: $color-primary; border-radius: $radius-md; font-size: 30rpx; font-weight: 700; line-height: 88rpx; box-shadow: none; }
+.bottom-action { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255,253,249,.98); box-shadow: $shadow-bottom; border-top: 1rpx solid $color-border-light; }
+.bottom-action button { width: 100%; height: 88rpx; color: #fff; background: $gradient-primary; border-radius: $radius-pill; font-size: 30rpx; font-weight: 700; line-height: 88rpx; box-shadow: $shadow-btn; }
 .bottom-action button[disabled] { background: $color-text-light; box-shadow: none; }
 </style>

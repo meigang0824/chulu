@@ -2,13 +2,6 @@
   <view class="product-card" :class="'product-card--' + variant" @tap="handleTap">
     <view class="product-card__image-wrap">
       <image class="product-card__image" :src="product.image" mode="aspectFill" lazy-load />
-      <StatusTag
-        v-if="product.tag"
-        class="product-card__badge"
-        :type="product.priority ? 'priority' : 'normal'"
-        :text="product.tag"
-        size="sm"
-      />
     </view>
 
     <view class="product-card__body">
@@ -53,11 +46,8 @@
 </template>
 
 <script>
-import StatusTag from '@/components/StatusTag/StatusTag.vue'
-
 export default {
   name: 'ProductCard',
-  components: { StatusTag },
   props: {
     product: { type: Object, default: () => ({}) },
     variant: { type: String, default: 'home-grid' },
@@ -90,7 +80,7 @@ export default {
 
 .product-card {
   overflow: hidden;
-  background: #fff;
+  background: $color-card;
   border-radius: $radius-card;
   border: 1rpx solid $color-border-light;
   box-shadow: $shadow-card;
@@ -105,13 +95,7 @@ export default {
   display: block;
   width: 100%;
   height: 220rpx;
-  background: $color-bg-deep;
-}
-
-.product-card__badge {
-  position: absolute;
-  left: 14rpx;
-  top: 14rpx;
+  background: $gradient-cream;
 }
 
 .product-card__body {
@@ -141,6 +125,7 @@ export default {
 .product-card__price {
   @include text-price(40rpx);
   font-weight: $font-weight-heavy;
+  letter-spacing: 0;
 }
 
 .product-card__origin {
@@ -206,13 +191,13 @@ export default {
   padding: 0 10rpx;
   color: $color-primary;
   background: $color-primary-light;
-  border-radius: $radius-sm;
+  border-radius: $radius-pill;
   @include font-base;
   font-size: 24rpx;
   line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
-  border: 1rpx solid rgba(232, 79, 95, 0.1);
+  border: 1rpx solid rgba(255, 92, 114, 0.12);
 }
 
 .product-card__clock {
@@ -232,20 +217,20 @@ export default {
   height: 64rpx;
   margin-top: 14rpx;
   color: #fff;
-  background: $color-primary;
-  border-radius: $radius-md;
-  box-shadow: none;
+  background: $gradient-primary;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-btn;
   @include font-base;
   font-size: 28rpx;
   font-weight: $font-weight-semibold;
 }
 
 .product-card--home-grid .product-card__image {
-  height: 168rpx;
+  height: 172rpx;
 }
 
 .product-card--home-grid .product-card__body {
-  padding: 12rpx 12rpx 12rpx;
+  padding: 14rpx 14rpx 14rpx;
 }
 
 .product-card--home-grid .product-card__name {
@@ -320,7 +305,7 @@ export default {
 .product-card--home-grid .product-card__btn {
   height: 50rpx;
   margin-top: 8rpx;
-  border-radius: 24rpx;
+  border-radius: $radius-pill;
   font-size: 22rpx;
   font-weight: $font-weight-bold;
 }
@@ -338,7 +323,7 @@ export default {
 .product-card--dashboard-mini .product-card__image-wrap {
   flex-shrink: 0;
   width: 160rpx;
-  border-radius: 18rpx;
+  border-radius: 22rpx;
 }
 
 .product-card--order-row .product-card__image,
@@ -379,7 +364,7 @@ export default {
   flex-shrink: 0;
   width: 168rpx;
   align-self: stretch;
-  border-radius: 18rpx;
+  border-radius: 22rpx;
 }
 
 .product-card--category-row .product-card__image {
@@ -475,11 +460,6 @@ export default {
   height: 200rpx;
 }
 
-.product-card--home-list .product-card__badge {
-  left: 10rpx;
-  top: 10rpx;
-}
-
 .product-card--home-list .product-card__body {
   flex: 1;
   min-width: 0;
@@ -547,9 +527,9 @@ export default {
   height: 56rpx;
   padding: 0 28rpx;
   color: #fff;
-  background: $color-primary;
-  border-radius: $radius-md;
-  box-shadow: none;
+  background: $gradient-primary;
+  border-radius: $radius-pill;
+  box-shadow: $shadow-btn;
   @include font-base;
   font-size: 24rpx;
   font-weight: $font-weight-semibold;

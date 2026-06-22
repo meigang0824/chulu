@@ -26,7 +26,6 @@ const pages = [
   '/pages/admin/store-settings/index',
   '/pages/admin/banner-config/index',
   '/pages/admin/category-manage/index',
-  '/pages/admin/route-manage/index',
   '/pages/admin/stats/index',
   '/pages/admin/group-list/index',
   '/pages/admin/create-group/index',
@@ -138,8 +137,7 @@ async function open(miniProgram, url) {
     const settingsTargets = [
       '/pages/admin/store-settings/index',
       '/pages/admin/banner-config/index',
-      '/pages/admin/category-manage/index',
-      '/pages/admin/route-manage/index'
+      '/pages/admin/category-manage/index'
     ]
     for (let index = 0; index < settingsItems.length; index += 1) {
       page = await open(miniProgram, '/pages/admin/settings/index')
@@ -155,11 +153,6 @@ async function open(miniProgram, url) {
     if (!(await tapFirst(page, '.category-add'))) throw new Error('新增分类按钮不可点击')
     if (!(await tapFirst(page, '.modal-close'))) throw new Error('分类弹窗关闭按钮不可点击')
     console.log('PASS 分类新增弹窗打开/关闭')
-
-    page = await open(miniProgram, '/pages/admin/route-manage/index')
-    if (!(await tapFirst(page, '.toolbar__add'))) throw new Error('新增批次按钮不可点击')
-    if (!(await tapFirst(page, '.route-modal__mask'))) throw new Error('批次弹窗遮罩关闭不可点击')
-    console.log('PASS 发货批次弹窗打开/关闭')
 
     page = await open(miniProgram, '/pages/admin/product-manage/index')
     const productTabs = await page.$$('.toolbar__tab')

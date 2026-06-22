@@ -3,7 +3,9 @@
     <view v-if="selectable" class="address-card__check" :class="{ 'address-card__check--on': checked }"></view>
     <view v-if="showRouteNo" class="address-card__route">{{ address.routeNo }}</view>
 
-    <view class="address-card__icon" v-if="variant === 'receiver'">⌖</view>
+    <view class="address-card__icon" v-if="variant === 'receiver'">
+      <AppIcon name="home" :size="32" color="#C87932" />
+    </view>
 
     <view class="address-card__body">
       <view class="address-card__head">
@@ -20,7 +22,7 @@
         </view>
       </view>
 
-      <view v-if="address.fulfillmentMethod" class="address-card__note">履约：{{ address.fulfillmentMethod }}</view>
+      <view v-if="showFulfillment && address.fulfillmentMethod" class="address-card__note">履约：{{ address.fulfillmentMethod }}</view>
       <view v-if="address.note" class="address-card__note">备注：{{ address.note }}</view>
     </view>
 
@@ -35,17 +37,19 @@
 
 <script>
 import StatusTag from '@/components/StatusTag/StatusTag.vue'
+import AppIcon from '@/components/AppIcon/AppIcon.vue'
 
 export default {
   name: 'AddressCard',
-  components: { StatusTag },
+  components: { StatusTag, AppIcon },
   props: {
     address: { type: Object, default: () => ({}) },
     variant: { type: String, default: 'receiver' },
     checked: { type: Boolean, default: false },
     selectable: { type: Boolean, default: false },
     showActions: { type: Boolean, default: false },
-    showRouteNo: { type: Boolean, default: false }
+    showRouteNo: { type: Boolean, default: false },
+    showFulfillment: { type: Boolean, default: true }
   },
   computed: {
     items() {
@@ -66,8 +70,9 @@ export default {
   align-items: flex-start;
   flex-wrap: wrap;
   padding: 30rpx 28rpx;
-  background: #fff;
+  background: $color-card;
   border-radius: $radius-card;
+  border: 1rpx solid $color-border-light;
   box-shadow: $shadow-card;
 }
 
@@ -77,11 +82,11 @@ export default {
   height: 34rpx;
   margin: 6rpx 22rpx 0 0;
   border: 2rpx solid $color-text-placeholder;
-  border-radius: 8rpx;
+  border-radius: 50%;
 }
 
 .address-card__check--on {
-  background: $color-primary;
+  background: $gradient-primary;
   border-color: $color-primary;
 }
 
@@ -92,7 +97,7 @@ export default {
   height: 40rpx;
   margin: 2rpx 16rpx 0 0;
   color: #fff;
-  background: $color-primary;
+  background: $gradient-primary;
   border-radius: 50%;
   font-size: 24rpx;
   font-weight: 700;
@@ -101,13 +106,12 @@ export default {
 .address-card__icon {
   @include flex-center;
   flex-shrink: 0;
-  width: 76rpx;
-  height: 76rpx;
-  margin-right: 22rpx;
-  color: $color-primary;
-  background: $color-primary-light;
+  width: 62rpx;
+  height: 62rpx;
+  margin: 6rpx 20rpx 0 0;
+  background: linear-gradient(180deg, #fff4e5 0%, #ffe7c7 100%);
+  border: 1rpx solid rgba(200, 121, 50, 0.16);
   border-radius: 50%;
-  font-size: 40rpx;
 }
 
 .address-card__body {
@@ -118,32 +122,34 @@ export default {
 .address-card__head {
   display: flex;
   align-items: center;
-  gap: 20rpx;
+  flex-wrap: wrap;
+  gap: 10rpx 16rpx;
 }
 
 .address-card__name {
   color: $color-text-main;
-  font-size: 34rpx;
-  font-weight: 700;
+  font-size: 32rpx;
+  font-weight: 800;
 }
 
 .address-card__phone {
-  color: $color-text-main;
-  font-size: 28rpx;
+  color: $color-text-regular;
+  font-size: 26rpx;
 }
 
 .address-card__detail {
-  margin-top: 14rpx;
+  margin-top: 10rpx;
   color: $color-text-regular;
-  font-size: 28rpx;
-  line-height: 1.55;
+  font-size: 26rpx;
+  line-height: 1.45;
 }
 
 .address-card__items {
   margin-top: 18rpx;
   padding: 14rpx 16rpx;
-  background: $color-bg-light;
-  border-radius: 16rpx;
+  background: rgba(255, 248, 239, 0.72);
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-card;
 }
 
 .address-card__item {
@@ -162,7 +168,7 @@ export default {
   width: 44rpx;
   height: 44rpx;
   margin-right: 12rpx;
-  border-radius: 8rpx;
+  border-radius: 12rpx;
 }
 
 .address-card__note {
@@ -200,7 +206,7 @@ export default {
   color: $color-orange;
   background: #fff;
   border: 1rpx solid $color-orange;
-  border-radius: 14rpx;
+  border-radius: $radius-pill;
   font-size: 24rpx;
 }
 

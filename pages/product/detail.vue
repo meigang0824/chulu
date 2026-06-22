@@ -20,7 +20,6 @@
     <template v-else>
       <view class="gallery">
         <image class="gallery__image" :src="product.bannerImage || product.image" mode="aspectFill" lazy-load />
-        <StatusTag class="gallery__tag" type="normal" :text="product.deliveryLabel || product.tag" size="lg" />
         <view class="gallery__count">{{ currentImageIndex + 1 }}/{{ galleryCount }}</view>
       </view>
 
@@ -37,8 +36,24 @@
         </view>
 
         <view class="price-row">
-          <text class="price">￥{{ product.price }}</text>
-          <text v-if="product.originPrice" class="origin">￥{{ product.originPrice }}</text>
+          <view class="price-row__main">
+            <text class="price">￥{{ product.price }}</text>
+            <text v-if="product.originPrice" class="origin">￥{{ product.originPrice }}</text>
+            <view class="limit">单次最多 {{ stepperMax }} 份</view>
+          </view>
+          <view class="detail-stepper">
+            <view
+              class="detail-stepper__btn"
+              :class="{ 'detail-stepper__btn--disabled': count <= 1 }"
+              @tap.stop="decreaseCount"
+            >−</view>
+            <view class="detail-stepper__value">{{ count }}</view>
+            <view
+              class="detail-stepper__btn"
+              :class="{ 'detail-stepper__btn--disabled': count >= stepperMax }"
+              @tap.stop="increaseCount"
+            >+</view>
+          </view>
         </view>
 
         <view class="stats">
@@ -70,32 +85,6 @@
           <view class="reminder-card__arrow">›</view>
         </view>
 
-        <view class="delivery-card">
-          <view class="delivery-card__icon">▣</view>
-          <view class="delivery-card__title">{{ product.deliveryLabel || product.tag }}</view>
-          <view class="delivery-card__text">配送范围：{{ product.deliveryRange }}</view>
-          <view class="delivery-card__arrow">›</view>
-        </view>
-
-        <view class="info-card">
-          <view class="info-card__label">
-            <view>储存方式</view>
-            <view>口感描述</view>
-          </view>
-          <view class="info-card__content">
-            <view>{{ product.storage || '-' }}</view>
-            <view>{{ product.taste || '-' }}</view>
-          </view>
-        </view>
-      </view>
-
-      <!-- 图文详情 -->
-      <view v-if="product.detailContent && product.detailContent.length" class="detail-content card">
-        <view class="detail-content__title">商品详情</view>
-        <view v-for="(item, idx) in product.detailContent" :key="idx" class="detail-content__item">
-          <text v-if="item.type === 'text'" class="detail-content__text">{{ item.content }}</text>
-          <image v-else-if="item.type === 'image'" :src="item.content" mode="widthFix" class="detail-content__image" lazy-load />
-        </view>
       </view>
 
       <view class="activity card">
@@ -108,7 +97,10 @@
         </view>
         <view v-else class="activity__list">
           <view class="activity__item" v-for="item in activities" :key="item.id">
-            <view class="activity__avatar">{{ avatarMap[item.avatar] || '甜' }}</view>
+            <view class="activity__avatar">
+              <image v-if="item.avatar" :src="item.avatar" mode="aspectFill" />
+              <text v-else>{{ item.avatarText || '甜' }}</text>
+            </view>
             <view>
               <view><text>{{ item.customer }}</text> {{ item.text }}</view>
               <view>{{ product.name }}</view>
@@ -117,17 +109,11 @@
         </view>
       </view>
 
-      <view class="buy-card card" v-if="!pageLoading">
-        <view>
-          <view class="buy-title">购买数量</view>
-          <view class="limit">限购 {{ product.limit || 5 }} 份</view>
-        </view>
-        <QuantityStepper v-model="count" :max="stepperMax" :disabled="product.stock <= 0" />
-      </view>
     </template>
 
     <view class="bottom-bar">
       <button class="share" open-type="share">⇧<text>分享</text></button>
+      <button class="cart-action" @tap="addToCart">加入购物车</button>
       <button class="join" :class="{ 'join--disabled': pageLoading || product.stock <= 0 }" :disabled="pageLoading || product.stock <= 0" @tap="goConfirm">
         <block v-if="pageLoading">加载中...</block>
         <block v-else-if="product.stock > 0">立即参团 ￥{{ totalPrice }}</block>
@@ -139,17 +125,14 @@
 
 <script>
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
-import QuantityStepper from '@/components/QuantityStepper/QuantityStepper.vue'
-import StatusTag from '@/components/StatusTag/StatusTag.vue'
 import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
 import { getBuyerActivities, getProductById } from '@/services/dataService'
 import { subscribeOrderReminder } from '@/utils/subscribeMessage'
 import { requireLogin } from '@/utils/auth'
-
-const FAVORITE_KEY = 'chulu_favorite_'
+import { addCartItem, getCartItemCount, isFavorite, setFavorite } from '@/utils/shopState'
 
 export default {
-  components: { CustomNavBar, QuantityStepper, StatusTag, SkeletonBlock },
+  components: { CustomNavBar, SkeletonBlock },
   data() {
     return {
       product: {},
@@ -158,7 +141,6 @@ export default {
       activities: [],
       pageLoading: true,
       currentImageIndex: 0,
-      avatarMap: { bear: '熊', rabbit: '兔', girl: '莉' },
       isFavorited: false
     }
   },
@@ -170,9 +152,9 @@ export default {
       return this.product.gallery ? this.product.gallery.length : 1
     },
     stepperMax() {
-      const limit = this.product.limit || 5
-      const stock = this.product.stock || 0
-      return Math.min(limit, stock)
+      if (Number(this.product && this.product.stock) <= 0) return 0
+      const limit = Number(this.product && this.product.limit)
+      return limit > 1 ? limit : 99
     },
     groupPercent() {
       const target = this.product.groupTarget || 0
@@ -183,10 +165,10 @@ export default {
   async onLoad(query) {
     this.pageLoading = true
     // H5模式下从$route.query获取参数
-    const productId = query.id || (this.$route && this.$route.query && this.$route.query.id)
+      const productId = query.id || (this.$route && this.$route.query && this.$route.query.id)
     if (productId) {
       this.productId = productId
-      this.isFavorited = !!uni.getStorageSync(FAVORITE_KEY + productId)
+      this.isFavorited = isFavorite(productId)
       try {
         await this.loadProduct(productId)
         this.activities = await getBuyerActivities(productId)
@@ -238,14 +220,36 @@ export default {
       if (!requireLogin('请先登录后再参与团购')) return
       uni.navigateTo({ url: `/pages/order/confirm/index?id=${this.product.id}&count=${this.count}` })
     },
+    decreaseCount() {
+      if (this.count <= 1) return
+      this.count -= 1
+    },
+    increaseCount() {
+      if (this.pageLoading || this.product.stock <= 0) {
+        uni.showToast({ title: this.pageLoading ? '商品加载中' : '商品已售罄', icon: 'none' })
+        return
+      }
+      if (this.count >= this.stepperMax) {
+        uni.showToast({ title: '已到最大购买数量', icon: 'none' })
+        return
+      }
+      this.count += 1
+    },
+    addToCart() {
+      if (this.pageLoading || this.product.stock <= 0) {
+        uni.showToast({ title: this.pageLoading ? '商品加载中' : '商品已售罄', icon: 'none' })
+        return
+      }
+      addCartItem(this.product, this.count)
+      const cartCount = getCartItemCount(this.product.id)
+      uni.showToast({ title: `购物车已有 ${cartCount} 份`, icon: 'success' })
+    },
     toggleFavorite() {
-      const key = FAVORITE_KEY + this.productId
       this.isFavorited = !this.isFavorited
+      setFavorite(this.product, this.isFavorited)
       if (this.isFavorited) {
-        uni.setStorageSync(key, true)
         uni.showToast({ title: '已收藏', icon: 'success' })
       } else {
-        uni.removeStorageSync(key)
         uni.showToast({ title: '已取消收藏', icon: 'none' })
       }
     },
@@ -257,7 +261,7 @@ export default {
       })
     },
     showAllActivity() {
-      uni.switchTab({ url: '/pages/order/list/index' })
+      uni.navigateTo({ url: `/pages/activity/list/index?productId=${this.productId}` })
     }
   }
 }
@@ -282,19 +286,19 @@ export default {
   margin: 0 24rpx;
   overflow: hidden;
   border-radius: $radius-xl;
+  box-shadow: $shadow-card;
 }
 .gallery__image { display: block; width: 100%; height: 560rpx; }
-.gallery__tag { position: absolute; left: 22rpx; top: 22rpx; }
 .gallery__count {
   position: absolute; right: 22rpx; top: 22rpx;
   @include flex-center; width: 84rpx; height: 54rpx;
   color: #fff; background: $color-mask;
-  border-radius: $radius-md; font-size: 28rpx;
+  border-radius: $radius-pill; font-size: 28rpx;
 }
 
 .panel {
   position: relative; margin: -34rpx 24rpx 0;
-  padding: 36rpx 32rpx 30rpx; background: #fff;
+  padding: 36rpx 32rpx 30rpx; background: $color-card;
   border: 1rpx solid $color-border-light;
   border-radius: $radius-xl; box-shadow: $shadow-card;
 }
@@ -310,21 +314,54 @@ export default {
 .favorite.is-favorited { color: $color-primary; }
 .favorite view { font-size: 52rpx; line-height: 1; }
 
-.price-row { display: flex; align-items: baseline; margin-top: 24rpx; }
+.price-row { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; margin-top: 24rpx; }
+.price-row__main { flex: 1; min-width: 0; }
 .price { color: $color-primary; font-size: 58rpx; font-weight: 800; }
 .origin { margin-left: 18rpx; color: $color-text-light; font-size: 28rpx; text-decoration: line-through; }
+.detail-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-shrink: 0;
+}
+.detail-stepper__btn {
+  @include flex-center;
+  width: 56rpx;
+  height: 56rpx;
+  color: $color-primary;
+  font-size: 34rpx;
+  font-weight: 800;
+  line-height: 1;
+  background: #fff;
+  border: 1rpx solid rgba(255, 92, 114, 0.22);
+  border-radius: 50%;
+  box-shadow: 0 8rpx 18rpx rgba(255, 92, 114, 0.1);
+}
+.detail-stepper__btn--disabled {
+  color: $color-text-placeholder;
+  background: $color-bg-deep;
+  border-color: $color-border-light;
+  box-shadow: none;
+}
+.detail-stepper__value {
+  width: 52rpx;
+  color: $color-text-main;
+  font-size: 30rpx;
+  font-weight: 700;
+  text-align: center;
+}
 
 .stats { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 24rpx; }
 .stats view {
   flex: 1; min-width: 190rpx; @include flex-center; height: 64rpx;
-  color: $color-primary; background: $color-primary-pale; border: 1rpx solid rgba(232, 79, 95, 0.12); border-radius: $radius-md; font-size: 24rpx;
+  color: $color-primary; background: $color-primary-pale; border: 1rpx solid rgba(255, 92, 114, 0.12); border-radius: $radius-pill; font-size: 24rpx;
 }
 .stats view:first-child { color: $color-text-regular; }
 
 .reminder-card {
   display: flex; align-items: center; gap: 18rpx;
   margin-top: 24rpx; padding: 22rpx 24rpx;
-  background: $color-orange-light; border: 1rpx solid #f1ddc6; border-radius: $radius-card;
+  background: $color-orange-light; border: 1rpx solid rgba(200, 121, 50, 0.18); border-radius: $radius-card;
 }
 .reminder-card__icon { font-size: 40rpx; }
 .reminder-card__text { flex: 1; min-width: 0; }
@@ -332,28 +369,7 @@ export default {
 .reminder-card__desc { @include text-caption($color-text-regular); font-size: 22rpx; }
 .reminder-card__arrow { color: $color-text-light; font-size: 40rpx; }
 
-.delivery-card {
-  display: flex; align-items: center; min-height: 76rpx; margin-top: 26rpx;
-  padding: 0 22rpx; border: 1rpx solid $color-border; border-radius: $radius-card;
-}
-.delivery-card__icon, .delivery-card__title { flex-shrink: 0; color: $color-text-main; font-size: 28rpx; font-weight: 700; }
-.delivery-card__icon { margin-right: 14rpx; color: $color-orange; }
-.delivery-card__text { flex: 1; min-width: 0; margin-left: 24rpx; color: $color-text-regular; font-size: 24rpx; @include text-ellipsis; }
-.delivery-card__arrow { color: $color-text-light; font-size: 40rpx; }
-
-.info-card { display: flex; margin-top: 26rpx; overflow: hidden; border: 1rpx solid $color-border; border-radius: $radius-card; }
-.info-card__label { flex-shrink: 0; width: 148rpx; background: $color-bg-light; color: $color-text-main; font-size: 26rpx; font-weight: 700; }
-.info-card__label view, .info-card__content view { min-height: 78rpx; padding: 22rpx; border-bottom: 1rpx solid $color-border-light; }
-.info-card__label view:last-child, .info-card__content view:last-child { border-bottom: none; }
-.detail-content { padding: 24rpx; }
-.detail-content__title { @include text-card-title; font-size: 30rpx; font-weight: $font-weight-heavy; margin-bottom: 20rpx; }
-.detail-content__item { margin-bottom: 20rpx; }
-.detail-content__text { @include text-body; font-size: 26rpx; line-height: 1.7; color: $color-text-regular; }
-.detail-content__image { width: 100%; border-radius: 16rpx; margin: 8rpx 0; }
-
-.info-card__content { flex: 1; min-width: 0; color: $color-text-regular; font-size: 25rpx; line-height: 1.45; }
-
-.activity, .buy-card { margin: 24rpx 24rpx 0; padding: 28rpx; }
+.activity { margin: 24rpx 24rpx 0; padding: 28rpx; }
 .activity-empty { margin-top: 16rpx; @include text-caption($color-text-light); text-align: center; padding: 16rpx 0; }
 .activity__list { display: flex; flex-direction: column; gap: 18rpx; margin-top: 22rpx; }
 .activity__item {
@@ -366,12 +382,11 @@ export default {
 .activity__item view:last-child view { @include text-ellipsis; }
 .activity__item text { color: $color-text-main; font-weight: 700; }
 .activity__avatar {
-  @include flex-center; flex-shrink: 0; width: 54rpx; height: 54rpx; margin-right: 12rpx;
-  color: $color-primary; background: $color-primary-light; border-radius: $radius-md; font-size: 20rpx; font-weight: 700;
+  @include flex-center; flex-shrink: 0; width: 54rpx; height: 54rpx; margin-right: 12rpx; overflow: hidden;
+  color: $color-primary; background: $color-primary-light; border-radius: 50%; font-size: 20rpx; font-weight: 700;
 }
+.activity__avatar image { width: 100%; height: 100%; }
 
-.buy-card { display: flex; align-items: center; justify-content: space-between; }
-.buy-title { color: $color-text-main; font-size: 34rpx; font-weight: 800; }
 .limit { margin-top: 10rpx; color: $color-text-light; font-size: 24rpx; }
 .link { color: $color-text-light; font-size: 26rpx; }
 
@@ -379,18 +394,31 @@ export default {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
   display: flex; align-items: center; gap: 22rpx;
   padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.98);
+  background: rgba(255, 253, 249, 0.98);
   border-top: 1rpx solid $color-border-light; box-shadow: $shadow-bottom;
 }
 .share {
   @include flex-center; flex-direction: column; width: 150rpx; height: 88rpx;
   color: $color-text-main; background: #fff; border: 1rpx solid $color-border;
-  border-radius: $radius-md; font-size: 28rpx;
+  border-radius: $radius-pill; font-size: 28rpx;
 }
 .share text { margin-top: 2rpx; font-size: 22rpx; }
+.cart-action {
+  @include flex-center;
+  flex: 0 0 190rpx;
+  height: 88rpx;
+  margin: 0;
+  color: $color-text-main;
+  background: #fff;
+  border: 1rpx solid $color-border;
+  border-radius: $radius-pill;
+  font-size: 28rpx;
+  font-weight: 800;
+}
 .join {
   @include flex-center; flex: 1; min-width: 0; height: 88rpx;
-  color: #fff; background: $color-primary; border-radius: $radius-md;
+  color: #fff; background: $gradient-primary; border-radius: $radius-pill;
+  box-shadow: $shadow-btn;
   font-size: 30rpx; font-weight: 700;
 }
 .join--disabled { background: $color-text-light; box-shadow: none; }

@@ -148,7 +148,7 @@
 .pill--active {
   color: $color-primary;
   background: $color-primary-light;
-  border-color: rgba(232, 79, 95, 0.18);
+  border-color: rgba(255, 92, 114, 0.20);
   font-weight: $font-weight-semibold;
 }
 
@@ -213,8 +213,8 @@
   padding: 0 24rpx;
   color: $color-orange-dark;
   background: $color-orange-light;
-  border: 1rpx solid #f1ddc6;
-  border-radius: $radius-md;
+  border: 1rpx solid rgba(200, 121, 50, 0.18);
+  border-radius: $radius-pill;
   @include text-body($font-weight-medium, $color-orange-dark);
 }
 
@@ -228,7 +228,7 @@
   align-items: center;
   gap: 20rpx;
   padding: 20rpx 30rpx;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 253, 249, 0.98);
   border-top: 1rpx solid $color-border-light;
   box-shadow: $shadow-bottom-sm;
   @include safe-bottom(20rpx);

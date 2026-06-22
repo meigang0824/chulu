@@ -114,7 +114,10 @@
       <scroll-view v-else class="activity__scroll" scroll-x show-scrollbar="false">
         <view class="activity__list">
         <view class="activity__item" v-for="item in activities" :key="item.id">
-          <view class="activity__avatar">{{ avatarMap[item.avatar] || '甜' }}</view>
+          <view class="activity__avatar">
+            <image v-if="item.avatar" :src="item.avatar" mode="aspectFill" />
+            <text v-else>{{ item.avatarText || '甜' }}</text>
+          </view>
           <view class="activity__text">
             <view><text>{{ item.customer }}</text> {{ item.text }}</view>
             <view>{{ item.productName }}</view>
@@ -144,11 +147,11 @@ export default {
       products: [],
       activities: [],
       activeProductCount: 0,
+      currentGroupDeadline: '',
       loading: true,
       bannerConfig: getBannerConfig(),
       bannerIndex: 0,
-      shop: {},
-      avatarMap: { bear: '熊', rabbit: '兔', girl: '莉' }
+      shop: {}
     }
   },
   computed: {
@@ -159,7 +162,7 @@ export default {
       return this.activeProductCount ? `${this.activeProductCount} 款商品正在团购` : '新鲜出炉，限时团购'
     },
     groupBadge() {
-      return '今晚22:00截单'
+      return this.currentGroupDeadline || '限时截单'
     },
     activeBanners() {
       return getActiveBanners(this.bannerConfig)
@@ -219,7 +222,8 @@ export default {
         const data = await getHomeData()
         this.products = data.products || []
         this.activities = data.activities || []
-        this.activeProductCount = data.activeProductCount || this.products.length
+        this.activeProductCount = data.activeProductCount !== undefined ? data.activeProductCount : this.products.length
+        this.currentGroupDeadline = data.groupDeadline || ''
         if (data.banners && data.bannerSettings) {
           this.bannerConfig = {
             settings: data.bannerSettings,
@@ -230,6 +234,7 @@ export default {
         this.products = []
         this.activities = []
         this.activeProductCount = 0
+        this.currentGroupDeadline = ''
       } finally {
         this.loading = false
       }
@@ -262,7 +267,7 @@ export default {
       uni.switchTab({ url: '/pages/category/index' })
     },
     showAllActivity() {
-      uni.switchTab({ url: '/pages/category/index' })
+      uni.navigateTo({ url: '/pages/activity/list/index' })
     }
   }
 }
@@ -277,7 +282,7 @@ export default {
 
 .hero {
   position: relative;
-  height: 338rpx;
+  height: 348rpx;
   margin-top: 18rpx;
   overflow: hidden;
   background: $gradient-hero;
@@ -294,7 +299,7 @@ export default {
   z-index: 2;
   width: 68%;
   height: 100%;
-  background: linear-gradient(90deg, rgba(24, 22, 20, 0.68) 0%, rgba(24, 22, 20, 0.38) 58%, rgba(24, 22, 20, 0) 100%);
+  background: linear-gradient(90deg, rgba(75, 36, 23, 0.68) 0%, rgba(75, 36, 23, 0.36) 58%, rgba(75, 36, 23, 0) 100%);
   pointer-events: none;
 }
 
@@ -327,7 +332,7 @@ export default {
   color: #fff;
   background: rgba(255, 255, 255, 0.18);
   border: 1rpx solid rgba(255, 255, 255, 0.26);
-  border-radius: 8rpx;
+  border-radius: $radius-pill;
   @include font-base;
   font-size: 20rpx;
   font-weight: $font-weight-semibold;
@@ -363,7 +368,7 @@ export default {
   padding: 8rpx 6rpx;
   background: rgba(255, 255, 255, 0.16);
   border: 1rpx solid rgba(255, 255, 255, 0.24);
-  border-radius: $radius-md;
+  border-radius: $radius-pill;
 }
 
 .hero__features view {
@@ -439,7 +444,7 @@ export default {
 
 .home-section {
   margin-top: 20rpx;
-  padding: 26rpx 16rpx 24rpx;
+  padding: 28rpx 18rpx 26rpx;
   background: $color-card;
 }
 
@@ -476,8 +481,8 @@ export default {
   padding: 0 18rpx;
   color: $color-primary;
   background: $color-primary-light;
-  border: 1rpx solid rgba(232, 79, 95, 0.16);
-  border-radius: $radius-md;
+  border: 1rpx solid rgba(255, 92, 114, 0.18);
+  border-radius: $radius-pill;
   @include text-caption($color-primary);
   font-size: 22rpx;
   font-weight: $font-weight-semibold;
@@ -511,17 +516,17 @@ export default {
 
 .product-strip {
   display: inline-flex;
-  gap: 18rpx;
+  gap: 16rpx;
   padding: 0 2rpx 4rpx;
 }
 
 .home-product-card {
   flex: 0 0 auto;
-  width: 214rpx;
+  width: 216rpx;
 }
 
 .home-product-card ::v-deep .product-card__image {
-  height: 150rpx;
+  height: 156rpx;
 }
 
 .home-product-card ::v-deep .product-card__body {
@@ -548,7 +553,7 @@ export default {
 }
 
 .home-product-card ::v-deep .product-card__price {
-  font-size: 28rpx;
+  font-size: 30rpx;
 }
 
 .home-product-card ::v-deep .product-card__origin {
@@ -582,7 +587,7 @@ export default {
 }
 
 .home-product-card ::v-deep .product-card__btn {
-  height: 42rpx;
+  height: 46rpx;
   margin-top: 6rpx;
   font-size: 20rpx;
 }
@@ -597,8 +602,9 @@ export default {
   flex-direction: column;
   color: $color-primary;
   background: $color-primary-light;
-  border: 1rpx solid rgba(232, 79, 95, 0.16);
+  border: 1rpx solid rgba(255, 92, 114, 0.18);
   border-radius: $radius-card;
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.58);
   font-size: 26rpx;
   font-weight: 700;
 }
@@ -692,12 +698,18 @@ export default {
   width: 54rpx;
   height: 54rpx;
   margin-right: 12rpx;
+  overflow: hidden;
   color: $color-primary;
   background: $color-primary-light;
   border-radius: $radius-md;
   @include font-base;
   font-size: 22rpx;
   font-weight: $font-weight-bold;
+}
+
+.activity__avatar image {
+  width: 100%;
+  height: 100%;
 }
 
 .activity__text {
