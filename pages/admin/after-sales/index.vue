@@ -39,9 +39,9 @@
         </view>
 
         <view class="refund-card__body">
-          <view><text>{{ isCancelledOrder(order) ? '取消金额' : '申请金额' }}</text><view>￥{{ order.refundAmount || order.payable || order.amount }}</view></view>
-          <view><text>{{ isCancelledOrder(order) ? '取消说明' : '申请原因' }}</text><view>{{ reasonText(order) }}</view></view>
-          <view><text>{{ isCancelledOrder(order) ? '取消时间' : '退款编号' }}</text><view>{{ isCancelledOrder(order) ? (order.cancelledAt || '-') : (order.refundNo || '-') }}</view></view>
+          <view><text>{{ amountLabel(order) }}</text><view>￥{{ money(order.refundAmount || order.payable || order.amount) }}</view></view>
+          <view><text>{{ reasonLabel(order) }}</text><view>{{ reasonText(order) }}</view></view>
+          <view><text>{{ noLabel(order) }}</text><view>{{ isCancelledOrder(order) ? (order.cancelledAt || '-') : (order.refundNo || '-') }}</view></view>
         </view>
 
         <view class="refund-card__items">
@@ -57,7 +57,7 @@
         <view class="refund-card__actions">
           <button class="refund-card__btn" @tap="viewOrder(order)">查看订单</button>
           <button v-if="order.refundStatus === 'pending'" class="refund-card__btn" @tap="handleRefund(order, 'rejected')">拒绝售后</button>
-          <button v-if="order.refundStatus === 'pending'" class="refund-card__btn refund-card__btn--primary" @tap="handleRefund(order, 'approved')">同意退款</button>
+          <button v-if="order.refundStatus === 'pending'" class="refund-card__btn refund-card__btn--primary" @tap="handleRefund(order, 'approved')">{{ approveText(order) }}</button>
         </view>
       </view>
     </view>
@@ -75,6 +75,7 @@ import AdminTabBar from '@/components/AdminTabBar/AdminTabBar.vue'
 import { getAdminOrders, handleRefundRequest } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar, EmptyState, SkeletonBlock, StatusTag, AdminTabBar },
@@ -113,6 +114,7 @@ export default {
     this.loadOrders()
   },
   methods: {
+    money,
     async loadOrders() {
       this.loading = true
       const orders = await getAdminOrders('all')
@@ -125,6 +127,21 @@ export default {
     isCancelledOrder(order) {
       return order.status === 'cancelled'
     },
+    isCancelRequest(order) {
+      return order.refundType === 'cancelOrder'
+    },
+    amountLabel(order) {
+      return this.isCancelRequest(order) || this.isCancelledOrder(order) ? '取消退款金额' : '申请金额'
+    },
+    reasonLabel(order) {
+      return this.isCancelRequest(order) || this.isCancelledOrder(order) ? '取消说明' : '申请原因'
+    },
+    noLabel(order) {
+      return this.isCancelledOrder(order) ? '取消时间' : '退款编号'
+    },
+    approveText(order) {
+      return this.isCancelRequest(order) ? '同意并退款' : '同意退款'
+    },
     tagType(order) {
       if (this.isCancelledOrder(order)) return 'cancelled'
       if (order.refundStatus === 'approved') return 'refundApproved'
@@ -133,12 +150,14 @@ export default {
     },
     tagText(order) {
       if (this.isCancelledOrder(order)) return '已取消'
+      if (this.isCancelRequest(order) && order.refundStatus === 'pending') return '取消待审核'
       if (order.refundStatus === 'approved') return '已同意'
       if (order.refundStatus === 'rejected') return '已拒绝'
       return '待处理'
     },
     reasonText(order) {
-      if (this.isCancelledOrder(order)) return '用户已取消订单，库存已自动回补'
+      if (this.isCancelledOrder(order)) return '店长已同意取消，库存已自动回补'
+      if (this.isCancelRequest(order)) return order.refundReasonText || '用户申请取消订单，待同意后退款'
       return order.refundReasonText || '用户已提交售后申请'
     },
     refundItems(order) {
@@ -153,8 +172,8 @@ export default {
     handleRefund(order, status) {
       const approved = status === 'approved'
       uni.showModal({
-        title: approved ? '同意退款' : '拒绝售后',
-        content: approved ? '确认同意该退款申请吗？' : '确认拒绝该售后申请吗？',
+        title: approved ? this.approveText(order) : '拒绝售后',
+        content: approved ? '确认同意该申请吗？同意后会执行退款并取消订单。' : '确认拒绝该售后申请吗？',
         confirmText: approved ? '同意' : '拒绝',
         confirmColor: approved ? '#ff5c72' : '#8f4d20',
         success: async ({ confirm }) => {
@@ -164,7 +183,7 @@ export default {
             await handleRefundRequest(order.id, status)
             await this.loadOrders()
             uni.hideLoading()
-            uni.showToast({ title: approved ? '已同意退款' : '已拒绝售后', icon: 'success' })
+            uni.showToast({ title: approved ? '已同意处理' : '已拒绝售后', icon: 'success' })
           } catch (error) {
             uni.hideLoading()
             showCloudError(error)

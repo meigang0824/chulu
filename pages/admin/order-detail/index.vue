@@ -23,7 +23,7 @@
         <StatusTag :type="refundTagType" :text="refundTagText" />
       </view>
       <view class="refund-card__body">
-        <view><text>申请金额</text><view>￥{{ order.refundAmount || order.payable || order.amount }}</view></view>
+        <view><text>申请金额</text><view>￥{{ money(order.refundAmount || order.payable || order.amount) }}</view></view>
         <view><text>申请原因</text><view>{{ order.refundReasonText || '用户已提交售后申请' }}</view></view>
       </view>
       <view v-if="order.refundStatus === 'pending'" class="refund-card__actions">
@@ -51,7 +51,7 @@
         <image class="goods-item__image" :src="item.image" mode="aspectFill" lazy-load />
         <view class="goods-item__main">
           <view class="goods-item__name">{{ item.name }}</view>
-          <view class="goods-item__meta">单价 ￥{{ item.price }} · 数量 ×{{ item.count }}</view>
+          <view class="goods-item__meta">单价 ￥{{ money(item.price) }} · 数量 ×{{ item.count }}</view>
         </view>
         <view class="goods-item__amount">￥{{ itemAmount(item) }}</view>
       </view>
@@ -68,10 +68,10 @@
     </view>
 
     <view class="card amount-card">
-      <view class="amount-row"><text>商品金额</text><view>￥{{ order.productAmount }}</view></view>
-      <view class="amount-row"><text>运费</text><view>￥{{ order.deliveryFee }}</view></view>
-      <view class="amount-row"><text>团购优惠</text><view>-￥{{ order.discount }}</view></view>
-      <view class="amount-total"><text>实付金额</text><view>￥{{ order.payable || order.amount }}</view></view>
+      <view class="amount-row"><text>商品金额</text><view>￥{{ money(order.productAmount) }}</view></view>
+      <view class="amount-row"><text>运费</text><view>￥{{ money(order.deliveryFee) }}</view></view>
+      <view class="amount-row"><text>团购优惠</text><view>-￥{{ money(order.discount) }}</view></view>
+      <view class="amount-total"><text>实付金额</text><view>￥{{ money(order.payable || order.amount) }}</view></view>
     </view>
 
     <view class="card progress-card">
@@ -99,6 +99,7 @@ import StatusTag from '@/components/StatusTag/StatusTag.vue'
 import { getAdminOrderById, handleRefundRequest, updateOrderStatus } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar, AddressCard, StatusTag },
@@ -158,12 +159,13 @@ export default {
     }
   },
   methods: {
+    money,
     async loadOrder(id = this.order.id) {
       const result = await getAdminOrderById(id)
       if (result) this.order = result
     },
     itemAmount(item) {
-      return (Number(item.price || 0) * Number(item.count || 0)).toFixed(1).replace(/\.0$/, '')
+      return money(Number(item.price || 0) * Number(item.count || 0))
     },
     copyAddress() {
       uni.setClipboardData({
@@ -201,7 +203,7 @@ export default {
       uni.showModal({
         title: approved ? '同意退款' : '拒绝售后',
         content: approved
-          ? '确认同意该退款申请吗？订单会标记为已同意退款。'
+          ? '确认同意该申请吗？同意后会执行退款，取消申请会同步取消订单并回补库存。'
           : '确认拒绝该售后申请吗？订单会标记为已拒绝退款。',
         confirmText: approved ? '同意' : '拒绝',
         confirmColor: approved ? '#ff5c72' : '#8f4d20',
@@ -212,7 +214,7 @@ export default {
             await handleRefundRequest(this.order.id, status)
             await this.loadOrder(this.order.id)
             uni.hideLoading()
-            uni.showToast({ title: approved ? '已同意退款' : '已拒绝售后', icon: 'success' })
+            uni.showToast({ title: approved ? '已同意处理' : '已拒绝售后', icon: 'success' })
           } catch (error) {
             uni.hideLoading()
             showCloudError(error)

@@ -1,5 +1,5 @@
 {
-  "envId": "aiwork-8g5erw9d885e24b4",
+  "envId": "cloudbase-d7gp8xx126047f577",
   "region": "ap-shanghai",
   "functionRoot": "cloudfunctions",
   "functions": [
@@ -19,6 +19,13 @@
     },
     {
       "name": "cancelOrder",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "handler": "index.main"
+    },
+    {
+      "name": "paymentNotify",
       "timeout": 15,
       "runtime": "Nodejs18.15",
       "memorySize": 256,

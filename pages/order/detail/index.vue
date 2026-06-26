@@ -26,17 +26,17 @@
           <image class="goods-item__image" :src="item.image" mode="aspectFill" lazy-load />
           <view class="goods-item__info">
             <view class="goods-item__name">{{ item.name }}</view>
-            <text>￥{{ item.price }} × {{ item.count }}</text>
+            <text>￥{{ money(item.price) }} × {{ item.count }}</text>
           </view>
           <view class="goods-item__amount">￥{{ itemAmount(item) }}</view>
         </view>
       </view>
 
       <view class="amount-card card">
-        <view class="amount-row"><text>商品金额</text><view>￥{{ order.productAmount || itemTotal }}</view></view>
-        <view class="amount-row"><text>配送费</text><view>￥{{ order.deliveryFee || 0 }}</view></view>
-        <view class="amount-row"><text>优惠</text><view>-￥{{ order.discount || 0 }}</view></view>
-        <view class="amount-total"><text>实付款</text><view>￥{{ order.payable || order.amount }}</view></view>
+        <view class="amount-row"><text>商品金额</text><view>￥{{ money(order.productAmount || itemTotal) }}</view></view>
+        <view class="amount-row"><text>配送费</text><view>￥{{ money(order.deliveryFee || 0) }}</view></view>
+        <view class="amount-row"><text>优惠</text><view>-￥{{ money(order.discount || 0) }}</view></view>
+        <view class="amount-total"><text>实付款</text><view>￥{{ money(order.payable || order.amount) }}</view></view>
       </view>
 
       <view class="info-card card">
@@ -93,7 +93,7 @@
     </template>
 
     <view v-if="!pageLoading && order.id" class="bottom-actions">
-      <button v-if="canCancel" class="action-btn action-btn--ghost" @tap="cancelOrder">取消订单</button>
+      <button v-if="canCancel" class="action-btn action-btn--ghost" @tap="cancelOrder">申请取消</button>
       <button v-if="['delivering', 'completed'].includes(order.status)" class="action-btn action-btn--ghost" @tap="viewLogistics">查看物流</button>
       <button v-if="canRefund" class="action-btn action-btn--ghost" @tap="goRefund">{{ refundActionText }}</button>
       <button class="action-btn action-btn--ghost" @tap="contact">联系客服</button>
@@ -113,6 +113,7 @@ import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import { cancelBuyerOrder, getBuyerOrderById, getShopConfig } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar, AddressCard, StatusTag, SkeletonBlock, EmptyState },
@@ -129,7 +130,7 @@ export default {
     },
     itemTotal() {
       const total = Number(this.mainItem.price || 0) * Number(this.mainItem.count || 0)
-      return total.toFixed(total % 1 === 0 ? 0 : 1)
+      return money(total)
     },
     renderItems() {
       return (this.order.items || []).map((item, index) => ({
@@ -154,7 +155,7 @@ export default {
       }
     },
     canCancel() {
-      return ['paid', 'pendingDelivery'].includes(this.order.status)
+      return ['paid', 'pendingDelivery'].includes(this.order.status) && this.order.refundStatus !== 'pending'
     },
     canRefund() {
       return ['delivering', 'completed'].includes(this.order.status)
@@ -173,6 +174,7 @@ export default {
     this.pageLoading = false
   },
   methods: {
+    money,
     progressIcon(step, index) {
       if (step.done) return '✓'
       if (step.active) return String(index + 1)
@@ -180,7 +182,7 @@ export default {
     },
     itemAmount(item) {
       const total = Number(item.price || 0) * Number(item.count || 0)
-      return total.toFixed(total % 1 === 0 ? 0 : 1)
+      return money(total)
     },
     copyOrderId() {
       uni.setClipboardData({ data: this.order.detailId || this.order.id })
@@ -244,16 +246,16 @@ export default {
     },
     cancelOrder() {
       uni.showModal({
-        title: '取消订单',
-        content: '确认取消该订单吗？取消后库存会自动回补。',
+        title: '申请取消订单',
+        content: '提交后需要店长审核，店长同意后会为你退款并取消订单。',
         success: async ({ confirm }) => {
           if (!confirm) return
           try {
-            uni.showLoading({ title: '取消中' })
+            uni.showLoading({ title: '提交中' })
             await cancelBuyerOrder(this.order.id)
             this.order = await getBuyerOrderById(this.order.id)
             uni.hideLoading()
-            uni.showToast({ title: '订单已取消', icon: 'success' })
+            uni.showToast({ title: '已提交申请', icon: 'success' })
           } catch (error) {
             uni.hideLoading()
             showCloudError(error)

@@ -60,8 +60,8 @@
             <view class="preview-product__name">{{ form.name || '商品名称' }}</view>
             <view class="preview-product__desc">{{ form.desc || '商品描述' }}</view>
             <view class="preview-product__price">
-              <text>￥{{ form.price || '0' }}</text>
-              <text v-if="form.originPrice" class="origin">￥{{ form.originPrice }}</text>
+              <text>￥{{ money(form.price || 0) }}</text>
+              <text v-if="form.originPrice" class="origin">￥{{ money(form.originPrice) }}</text>
             </view>
             <view class="preview-product__stock">库存 {{ form.stock || '0' }} 份</view>
           </view>
@@ -83,6 +83,7 @@ import { getAdminProductById, getCategories, saveProduct } from '@/services/data
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
 import { uploadImageToCloud } from '@/utils/image'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar },
@@ -126,6 +127,7 @@ export default {
     }
   },
   methods: {
+    money,
     async loadCategories() {
       try {
         const list = await getCategories()

@@ -21,7 +21,7 @@
               <text>单次最多 {{ itemMax(item) }} 份</text>
             </view>
             <view class="cart-item__bottom">
-              <view class="cart-item__price">￥{{ item.price }}</view>
+              <view class="cart-item__price">￥{{ money(item.price) }}</view>
               <view class="cart-stepper">
                 <view
                   class="cart-stepper__btn"
@@ -60,6 +60,8 @@ import BuyerTabBar from '@/components/BuyerTabBar/BuyerTabBar.vue'
 import { getCartItems, removeCartItems, saveCartItems, setCheckoutItems, updateCartItemCount } from '@/utils/shopState'
 import { requireLogin } from '@/utils/auth'
 import { getProductById } from '@/services/dataService'
+import { IMAGE_ASSETS, resolveImageUrl } from '@/utils/image'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar, EmptyState, BuyerTabBar },
@@ -77,12 +79,23 @@ export default {
     },
     totalAmount() {
       const total = this.items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.count || 0), 0)
-      return total.toFixed(2)
+      return money(total)
     }
   },
   methods: {
-    loadCart() {
-      this.items = getCartItems()
+    money,
+    async loadCart() {
+      const items = getCartItems()
+      this.items = items
+      const resolved = await Promise.all(items.map(async item => {
+        const imageFileID = item.imageFileID || item.image
+        return {
+          ...item,
+          image: await resolveImageUrl(imageFileID, IMAGE_ASSETS.product),
+          imageFileID
+        }
+      }))
+      this.items = resolved
     },
     async repairItemImage(item) {
       const id = item.productId || item.id

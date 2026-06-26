@@ -133,10 +133,9 @@ export default {
       this.dashboardStats = data.dashboardStats
       this.products = data.products
       this.orders = data.orders
-      const refundCount = (data.refundOrders || []).length
-      const cancelledCount = (data.cancelledOrders || []).length
+      const refundCount = (data.refundOrders || []).filter(item => item.refundStatus === 'pending').length
       this.quickActions = this.quickActions.map(item => {
-        if (item.key === 'refund') return { ...item, badge: refundCount + cancelledCount }
+        if (item.key === 'refund') return { ...item, badge: refundCount }
         return item
       })
       this.shop = shopConfig

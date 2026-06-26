@@ -37,8 +37,8 @@
 
         <view class="price-row">
           <view class="price-row__main">
-            <text class="price">￥{{ product.price }}</text>
-            <text v-if="product.originPrice" class="origin">￥{{ product.originPrice }}</text>
+            <text class="price">￥{{ money(product.price) }}</text>
+            <text v-if="product.originPrice" class="origin">￥{{ money(product.originPrice) }}</text>
             <view class="limit">单次最多 {{ stepperMax }} 份</view>
           </view>
           <view class="detail-stepper">
@@ -130,6 +130,7 @@ import { getBuyerActivities, getProductById } from '@/services/dataService'
 import { subscribeOrderReminder } from '@/utils/subscribeMessage'
 import { requireLogin } from '@/utils/auth'
 import { addCartItem, getCartItemCount, isFavorite, setFavorite } from '@/utils/shopState'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar, SkeletonBlock },
@@ -146,7 +147,7 @@ export default {
   },
   computed: {
     totalPrice() {
-      return (this.product.price * this.count).toFixed(1)
+      return money(Number(this.product.price || 0) * Number(this.count || 0))
     },
     galleryCount() {
       return this.product.gallery ? this.product.gallery.length : 1
@@ -197,6 +198,7 @@ export default {
     }
   },
   methods: {
+    money,
     async loadProduct(id) {
       try {
         const product = await getProductById(id)

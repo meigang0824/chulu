@@ -98,7 +98,7 @@
 <script>
 import { getRoleHome, isAdminRole, loginWithWechat, redirectLoggedInFromLogin, loginAsGuest, updateAuthSessionUser } from '@/utils/auth'
 import { setPortalMode } from '@/services/dataService'
-import { uploadImageToCloud } from '@/utils/image'
+import { cloudImage, resolveImageUrl, uploadImageToCloud } from '@/utils/image'
 import { callFunction } from '@/services/apiClient'
 
 export default {
@@ -115,15 +115,15 @@ export default {
       profileAvatarTemp: '',
       pendingWechatSession: null,
       assets: {
-        bgTop: 'https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/login/login_bg_top.jpg',
-        bgBottom: 'https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/login/login_bg_bottom.jpg',
-        bread: 'https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/login/icon_bread.svg',
-        delivery: 'https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/login/feature_delivery.jpg',
-        fresh: 'https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/login/feature_fresh.jpg',
-        heart: 'https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/login/icon_heart.svg',
-        ingredients: 'https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/login/feature_ingredients.jpg',
-        user: 'https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/login/icon_user.svg',
-        wechat: 'https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la/login/icon_wechat.png'
+        bgTop: cloudImage('login/login_bg_top.jpg'),
+        bgBottom: cloudImage('login/login_bg_bottom.jpg'),
+        bread: cloudImage('login/icon_bread.svg'),
+        delivery: cloudImage('login/feature_delivery.jpg'),
+        fresh: cloudImage('login/feature_fresh.jpg'),
+        heart: cloudImage('login/icon_heart.svg'),
+        ingredients: cloudImage('login/feature_ingredients.jpg'),
+        user: cloudImage('login/icon_user.svg'),
+        wechat: cloudImage('login/icon_wechat.png')
       }
     }
   },
@@ -134,6 +134,7 @@ export default {
     if (query && query.requiredRole) {
       this.requiredRole = query.requiredRole
     }
+    this.resolveLoginAssets()
   },
   onShow() {
     // 延迟执行，避免与用户操作产生竞态
@@ -142,6 +143,11 @@ export default {
     }, 100)
   },
   methods: {
+    async resolveLoginAssets() {
+      const entries = Object.entries(this.assets)
+      const resolved = await Promise.all(entries.map(async ([key, value]) => [key, await resolveImageUrl(value, value)]))
+      this.assets = resolved.reduce((map, [key, value]) => ({ ...map, [key]: value }), {})
+    },
     goBack() {
       const pages = getCurrentPages()
       if (pages.length > 1) {
@@ -325,17 +331,7 @@ export default {
       this.profileAvatarTemp = avatarUrl
     },
     openAgreement(type) {
-      // 打开协议页面
-      const title = type === 'user' ? '用户协议' : '隐私政策'
-      const content = type === 'user' 
-        ? '欢迎使用初炉烘焙！\n\n1. 用户注册与账户安全\n2. 商品购买与支付\n3. 配送与售后服务\n4. 隐私保护政策\n\n（完整协议内容请访问官网）'
-        : '初炉烘焙重视您的隐私保护！\n\n1. 信息收集范围\n2. 信息使用方式\n3. 信息保护措施\n4. 用户权利说明\n\n（完整政策内容请访问官网）'
-      uni.showModal({
-        title,
-        content,
-        showCancel: false,
-        confirmText: '我知道了'
-      })
+      uni.navigateTo({ url: `/pages/legal/index?type=${type}` })
     },
   }
 }

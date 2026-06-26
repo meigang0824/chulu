@@ -75,7 +75,7 @@ import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import StatusTag from '@/components/StatusTag/StatusTag.vue'
 import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
 import EmptyState from '@/components/EmptyState/EmptyState.vue'
-import { ensurePageAccess } from '@/utils/auth'
+import { ensurePageAccess, getAuthSession } from '@/utils/auth'
 import { groupAPI } from '@/services/apiClient'
 import { IMAGE_ASSETS } from '@/utils/image'
 import { hydrateGroupImages } from '@/services/dataService'
@@ -110,10 +110,14 @@ export default {
     this.loadGroups()
   },
   methods: {
+    authToken() {
+      const session = getAuthSession()
+      return session && session.token ? session.token : ''
+    },
     async loadGroups() {
       this.loading = true
       try {
-        const groups = await groupAPI.list()
+        const groups = await groupAPI.list({}, this.authToken())
         this.groups = await Promise.all((groups || []).map(hydrateGroupImages))
       } catch (e) {
         console.error('加载团购失败:', e)
@@ -136,7 +140,7 @@ export default {
         success: async ({ confirm }) => {
           if (!confirm) return
           try {
-            await groupAPI.updateStatus(group.id, 'ended')
+            await groupAPI.updateStatus(group.id, 'ended', this.authToken())
             uni.showToast({ title: '团购已结束', icon: 'success' })
             this.loadGroups()
           } catch (e) {
@@ -152,7 +156,7 @@ export default {
         success: async ({ confirm }) => {
           if (!confirm) return
           try {
-            await groupAPI.delete(group.id)
+            await groupAPI.delete(group.id, this.authToken())
             uni.showToast({ title: '已删除', icon: 'success' })
             this.loadGroups()
           } catch (e) {

@@ -35,7 +35,7 @@
             <view class="product-item__info">
               <view class="product-item__name">{{ product.name }}</view>
               <view class="product-item__meta">
-                <text>￥{{ product.price }}</text>
+                <text>￥{{ money(product.price) }}</text>
                 <text>库存 {{ product.stock || product.totalStock || 0 }}</text>
               </view>
             </view>
@@ -79,8 +79,9 @@ import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import AdminTabBar from '@/components/AdminTabBar/AdminTabBar.vue'
 import { groupAPI } from '@/services/apiClient'
 import { getAdminOrders, hydrateGroupImages } from '@/services/dataService'
-import { ensurePageAccess } from '@/utils/auth'
+import { ensurePageAccess, getAuthSession } from '@/utils/auth'
 import { IMAGE_ASSETS } from '@/utils/image'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar, StatusTag, SkeletonBlock, EmptyState, AdminTabBar },
@@ -104,11 +105,16 @@ export default {
     }
   },
   methods: {
+    money,
+    authToken() {
+      const session = getAuthSession()
+      return session && session.token ? session.token : ''
+    },
     async loadGroup(id) {
       this.loading = true
       try {
         // 加载团购详情
-        const rawGroup = await groupAPI.get(id)
+        const rawGroup = await groupAPI.get(id, this.authToken())
         const group = rawGroup ? await hydrateGroupImages(rawGroup) : null
         this.group = group
         // 解析关联商品

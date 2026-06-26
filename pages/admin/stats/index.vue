@@ -40,7 +40,7 @@
           <view class="product-row__name">{{ item.name }}</view>
           <view class="product-row__meta">已售 {{ item.sold }} 份 · 库存 {{ item.stock }} 份</view>
         </view>
-        <view class="product-row__price">￥{{ item.price }}</view>
+        <view class="product-row__price">￥{{ money(item.price) }}</view>
       </view>
     </view>
   </view>
@@ -50,6 +50,7 @@
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import { getAdminStatsData } from '@/services/dataService'
 import { ensurePageAccess } from '@/utils/auth'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar },
@@ -83,7 +84,8 @@ export default {
       if (this.lowStockCount > 0) return `有 ${this.lowStockCount} 款热销商品库存偏低，建议及时补货或下架。`
       return '当前履约压力较低，可以关注热销商品和新团发布。'
     }
-  }
+  },
+  methods: { money }
 }
 </script>
 

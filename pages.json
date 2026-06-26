@@ -19,6 +19,12 @@
       }
     },
     {
+      "path": "pages/legal/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/category/index",
       "style": {
         "navigationStyle": "custom"

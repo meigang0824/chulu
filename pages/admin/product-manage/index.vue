@@ -58,8 +58,8 @@
           </view>
           <view class="product-card__desc">{{ item.desc || item.subtitle }}</view>
           <view class="product-card__meta">
-            <text>￥{{ item.price }}</text>
-            <text>原价 ￥{{ item.originPrice }}</text>
+            <text>￥{{ money(item.price) }}</text>
+            <text>原价 ￥{{ money(item.originPrice) }}</text>
             <text>库存 {{ item.stock }}</text>
             <text>已售 {{ item.sold }}</text>
           </view>
@@ -90,6 +90,7 @@ import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
 import { getAdminProducts, updateProductStatus, deleteProduct } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar, StatusTag, EmptyState, SkeletonBlock },
@@ -141,6 +142,7 @@ export default {
     this.loadProducts()
   },
   methods: {
+    money,
     async loadProducts() {
       this.loading = true
       this.products = await getAdminProducts()

@@ -16,8 +16,8 @@
         <!-- home-list variant: price + button in footer row -->
         <view v-if="variant === 'home-list'" class="product-card__footer-row">
           <view class="product-card__price-block">
-            <text class="product-card__price">￥{{ product.price }}</text>
-            <text v-if="product.originPrice" class="product-card__origin">￥{{ product.originPrice }}</text>
+            <text class="product-card__price">￥{{ money(product.price) }}</text>
+            <text v-if="product.originPrice" class="product-card__origin">￥{{ money(product.originPrice) }}</text>
           </view>
           <button v-if="showAction" class="product-card__btn product-card__btn--sm" @tap.stop="handleAction">
             {{ actionText }}
@@ -25,8 +25,8 @@
         </view>
         <!-- other variants: inline price row -->
         <view v-else class="product-card__price-row">
-          <text class="product-card__price">￥{{ product.price }}</text>
-          <text v-if="product.originPrice" class="product-card__origin">￥{{ product.originPrice }}</text>
+          <text class="product-card__price">￥{{ money(product.price) }}</text>
+          <text v-if="product.originPrice" class="product-card__origin">￥{{ money(product.originPrice) }}</text>
         </view>
       </view>
 
@@ -46,6 +46,8 @@
 </template>
 
 <script>
+import { money } from '@/utils/format'
+
 export default {
   name: 'ProductCard',
   props: {
@@ -65,6 +67,7 @@ export default {
     }
   },
   methods: {
+    money,
     handleTap() {
       this.$emit('tap', this.product)
     },

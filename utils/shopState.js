@@ -1,4 +1,4 @@
-import { IMAGE_ASSETS, cloudImageHttpsUrl, normalizeImageUrl } from '@/utils/image'
+import { IMAGE_ASSETS, normalizeImageUrl } from '@/utils/image'
 
 const CART_KEY = 'chulu_cart_items'
 const FAVORITE_PREFIX = 'chulu_favorite_'
@@ -12,8 +12,7 @@ function countItems(items = []) {
 }
 
 function displayImage(value, fallback = IMAGE_ASSETS.product) {
-  const normalized = normalizeImageUrl(value, fallback)
-  return cloudImageHttpsUrl(normalized) || normalized
+  return normalizeImageUrl(value, fallback)
 }
 
 export function syncCartBadge(items = getCartItems()) {

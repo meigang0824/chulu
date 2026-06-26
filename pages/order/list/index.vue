@@ -106,8 +106,8 @@ export default {
   },
   methods: {
     cardActionText(order) {
-      if (['paid', 'pendingDelivery'].includes(order.status)) return '取消订单'
-      if (order.refundStatus === 'pending') return '退款处理中'
+      if (order.refundStatus === 'pending') return order.refundType === 'cancelOrder' ? '取消审核中' : '退款处理中'
+      if (['paid', 'pendingDelivery'].includes(order.status)) return '申请取消'
       if (order.status === 'delivering') return '查看物流'
       if (order.status === 'completed') return '申请退款'
       if (order.status === 'cancelled') return '再次购买'
@@ -185,15 +185,15 @@ export default {
     },
     cancelOrder(order) {
       uni.showModal({
-        title: '取消订单',
-        content: '确认取消该订单吗？取消后库存会自动回补。',
+        title: '申请取消订单',
+        content: '提交后需要店长审核，店长同意后会为你退款并取消订单。',
         success: async ({ confirm }) => {
           if (!confirm) return
           try {
-            uni.showLoading({ title: '取消中' })
+            uni.showLoading({ title: '提交中' })
             await cancelBuyerOrder(order.id)
             uni.hideLoading()
-            uni.showToast({ title: '订单已取消', icon: 'success' })
+            uni.showToast({ title: '已提交申请', icon: 'success' })
             this.loadOrders()
           } catch (error) {
             uni.hideLoading()

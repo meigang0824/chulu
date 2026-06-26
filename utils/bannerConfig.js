@@ -1,4 +1,4 @@
-import { IMAGE_ASSETS, cloudImageHttpsUrl, normalizeImageUrl } from '@/utils/image'
+import { IMAGE_ASSETS, normalizeImageUrl } from '@/utils/image'
 
 const STORAGE_KEY = 'chulu_home_banner_config'
 
@@ -96,7 +96,7 @@ export function getActiveBanners(config) {
   const banners = normalized.banners.map((item, index) => {
     const source = sourceBanners.find(sourceItem => sourceItem && sourceItem.id === item.id) || sourceBanners[index] || {}
     const displayImage = source.image && source.image !== source.imageFileID ? source.image : item.image
-    return { ...item, image: cloudImageHttpsUrl(displayImage) || displayImage || item.image }
+    return { ...item, image: displayImage || item.image }
   })
   const enabled = banners.filter(item => item.enabled).sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0))
   return enabled.length ? enabled : banners.slice(0, 1)

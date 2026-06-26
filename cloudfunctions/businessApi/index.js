@@ -8,12 +8,21 @@ const _ = db.command
 
 // 微信小程序配置
 const WECHAT_CONFIG = {
-  appid: process.env.WECHAT_APPID || 'wxa7b8ae590c1373d2',
+  appid: process.env.WECHAT_APPID || 'wx58f4dfa2c16fe2f0',
   secret: process.env.WECHAT_SECRET || ''
 }
 
+const WECHAT_PAY_CONFIG = {
+  mchid: process.env.WECHAT_PAY_MCH_ID || '1747393367',
+  serialNo: process.env.WECHAT_PAY_SERIAL_NO || '',
+  apiV3Key: process.env.WECHAT_PAY_API_V3_KEY || '',
+  privateKey: process.env.WECHAT_PAY_PRIVATE_KEY || '',
+  notifyUrl: process.env.WECHAT_PAY_NOTIFY_URL || '',
+  enabled: process.env.WECHAT_PAY_ENABLED === 'true'
+}
+
 const ADMIN_ROLES = ['owner', 'manager', 'staff']
-const DEFAULT_USER_ROLE = 'manager'
+const DEFAULT_USER_ROLE = 'buyer'
 const SESSION_DAYS = 7
 
 function now() { return new Date().toISOString() }
@@ -21,6 +30,102 @@ function isAdmin(r) { return ADMIN_ROLES.includes(r) }
 function isPlaceholderDoc(row = {}) { return row && row._init === true }
 function createToken() { return crypto.randomBytes(24).toString('hex') + Date.now().toString(36) }
 function sessionExpiresAt() { return new Date(Date.now() + SESSION_DAYS * 86400000).toISOString() }
+function createOrderNo() { return `o${Date.now()}${Math.random().toString(36).slice(2, 6)}` }
+function businessError(code, message) {
+  const error = new Error(message)
+  error.code = code
+  return error
+}
+
+function normalizePrivateKey(value = '') {
+  return String(value || '').replace(/\\n/g, '\n').trim()
+}
+
+function isWechatPayEnabled() {
+  return !!(
+    WECHAT_PAY_CONFIG.enabled &&
+    WECHAT_CONFIG.appid &&
+    WECHAT_PAY_CONFIG.mchid &&
+    WECHAT_PAY_CONFIG.serialNo &&
+    WECHAT_PAY_CONFIG.apiV3Key &&
+    normalizePrivateKey(WECHAT_PAY_CONFIG.privateKey) &&
+    WECHAT_PAY_CONFIG.notifyUrl
+  )
+}
+
+function randomNonce(size = 16) {
+  return crypto.randomBytes(size).toString('hex')
+}
+
+function amountToFen(amount) {
+  return Math.max(1, Math.round(Number(amount || 0) * 100))
+}
+
+function signWechatPayMessage(message) {
+  return crypto
+    .createSign('RSA-SHA256')
+    .update(message)
+    .sign(normalizePrivateKey(WECHAT_PAY_CONFIG.privateKey), 'base64')
+}
+
+function wechatPayAuthHeader(method, urlPath, bodyText = '') {
+  const timestamp = Math.floor(Date.now() / 1000).toString()
+  const nonce = randomNonce()
+  const message = `${method}\n${urlPath}\n${timestamp}\n${nonce}\n${bodyText}\n`
+  const signature = signWechatPayMessage(message)
+  return `WECHATPAY2-SHA256-RSA2048 mchid="${WECHAT_PAY_CONFIG.mchid}",nonce_str="${nonce}",signature="${signature}",timestamp="${timestamp}",serial_no="${WECHAT_PAY_CONFIG.serialNo}"`
+}
+
+async function requestWechatPay(method, urlPath, body = null) {
+  const bodyText = body ? JSON.stringify(body) : ''
+  const response = await fetch(`https://api.mch.weixin.qq.com${urlPath}`, {
+    method,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Accept-Encoding': 'identity',
+      Authorization: wechatPayAuthHeader(method, urlPath, bodyText),
+      'User-Agent': 'chulu-bakery-miniapp/1.0'
+    },
+    body: bodyText || undefined
+  })
+  const text = await response.text()
+  const data = text ? parseJson(text, {}) : {}
+  if (!response.ok) {
+    const message = data.message || data.detail || `微信支付请求失败(${response.status})`
+    throw businessError('WECHAT_PAY_API_ERROR', message)
+  }
+  return data
+}
+
+function buildPaymentParams(prepayId) {
+  const timeStamp = Math.floor(Date.now() / 1000).toString()
+  const nonceStr = randomNonce()
+  const packageValue = `prepay_id=${prepayId}`
+  const paySign = signWechatPayMessage(`${WECHAT_CONFIG.appid}\n${timeStamp}\n${nonceStr}\n${packageValue}\n`)
+  return { timeStamp, nonceStr, package: packageValue, signType: 'RSA', paySign }
+}
+
+async function requireUserSession(authToken) {
+  const auth = await getAccountByToken(authToken)
+  if (!auth || !auth.account || auth.account.role === 'guest') {
+    throw businessError('AUTH_REQUIRED', '请先登录')
+  }
+  return auth
+}
+
+async function requireAdminSession(authToken) {
+  const auth = await requireUserSession(authToken)
+  if (!isAdmin(auth.account.role)) {
+    throw businessError('PERMISSION_DENIED', '需要店长权限')
+  }
+  return auth
+}
+
+function canAccessOrder(auth, order = {}) {
+  if (!auth || !auth.account) return false
+  return isAdmin(auth.account.role) || order.buyerId === auth.account.id
+}
 
 async function createSession(accountId, openid = '') {
   const token = createToken()
@@ -266,13 +371,13 @@ async function promoteAllUsersToManager(authToken) {
       skipped += 1
       continue
     }
-    if (account.role === DEFAULT_USER_ROLE) {
+    if (account.role === 'manager') {
       skipped += 1
       continue
     }
     await db.collection('accounts').doc(account._id).update({
       data: {
-        role: DEFAULT_USER_ROLE,
+        role: 'manager',
         status: account.status || 'active',
         updatedAt: now()
       }
@@ -281,7 +386,7 @@ async function promoteAllUsersToManager(authToken) {
   }
   return {
     ok: true,
-    role: DEFAULT_USER_ROLE,
+    role: 'manager',
     updated,
     skipped,
     total: (accounts || []).length
@@ -290,9 +395,14 @@ async function promoteAllUsersToManager(authToken) {
 
 // ==================== 商品 ====================
 
-async function listProducts(params = {}) {
+async function listProducts(params = {}, authToken = '') {
+  const auth = await getAccountByToken(authToken)
   let query = {}
-  if (params.status) query.status = params.status
+  if (isAdmin(auth && auth.account && auth.account.role)) {
+    if (params.status) query.status = params.status
+  } else {
+    query.status = params.status || 'active'
+  }
   if (params.categoryKey) query.categoryKey = params.categoryKey
   const { data } = await db.collection('products').where(query).orderBy('sort', 'asc').limit(1000).get()
   return data.filter(row => !isPlaceholderDoc(row)).map(normalizeProductDoc)
@@ -316,9 +426,15 @@ async function findProductDocs(id) {
   return (data || []).filter(row => !isPlaceholderDoc(row))
 }
 
-async function getProduct(id) {
+async function getProduct(id, authToken = '', options = {}) {
   const data = await findProductDocs(id)
-  return data.length ? normalizeProductDoc(data[0]) : null
+  if (!data.length) return null
+  const product = data[0]
+  if (!options.includeInactive && product.status && product.status !== 'active') {
+    const auth = await getAccountByToken(authToken)
+    if (!isAdmin(auth && auth.account && auth.account.role)) return null
+  }
+  return normalizeProductDoc(product)
 }
 
 async function createProduct(body) {
@@ -335,7 +451,7 @@ async function createProduct(body) {
     gallery: JSON.stringify(body.gallery || []), createdAt: now(), updatedAt: now()
   }
   await db.collection('products').add({ data: doc })
-  const created = await getProduct(id)
+  const created = await getProduct(id, '', { includeInactive: true })
   return created
 }
 
@@ -368,7 +484,7 @@ async function updateProduct(id, body) {
     updatedAt: now()
   }
   if (existing.length) await db.collection('products').doc(existing[0]._id).update({ data: updateData })
-  return await getProduct(id)
+  return await getProduct(id, '', { includeInactive: true })
 }
 
 async function deleteProduct(id) {
@@ -379,17 +495,24 @@ async function deleteProduct(id) {
 
 // ==================== 订单 ====================
 
-async function listOrders(params = {}) {
+async function listOrders(params = {}, authToken = '') {
+  const auth = await requireUserSession(authToken)
   let query = {}
   if (params.status && params.status !== 'all') query.status = params.status
-  if (params.buyerId) query.buyerId = params.buyerId
+  if (isAdmin(auth.account.role)) {
+    if (params.buyerId) query.buyerId = params.buyerId
+  } else {
+    query.buyerId = auth.account.id
+  }
   const { data } = await db.collection('orders').where(query).orderBy('createdAt', 'desc').limit(1000).get()
   return enrichOrdersWithAccounts(data.filter(row => !isPlaceholderDoc(row)).map(normalizeOrderDoc))
 }
 
-async function getOrder(id) {
+async function getOrder(id, authToken = '') {
+  const auth = await requireUserSession(authToken)
   const { data } = await db.collection('orders').where({ id }).limit(1).get()
   if (!data.length) return null
+  if (!canAccessOrder(auth, data[0])) throw businessError('PERMISSION_DENIED', '无权查看该订单')
   const enriched = await enrichOrdersWithAccounts([normalizeOrderDoc(data[0])])
   return enriched[0] || null
 }
@@ -421,36 +544,236 @@ async function enrichOrdersWithAccounts(orders = []) {
   })
 }
 
-async function createOrder(body) {
-  const id = `o${Date.now()}`
-  const doc = {
-    id, orderNo: id, buyerId: body.buyerId || '', status: body.status || 'pendingDelivery',
-    payStatus: body.payStatus || 'paid', amount: body.amount || 0,
-    productAmount: body.productAmount || 0, deliveryFee: body.deliveryFee || 0,
-    discount: body.discount || 0, payable: body.payable || body.amount || 0,
-    address: JSON.stringify(body.address || {}), items: JSON.stringify(body.items || []),
-    note: body.note || '', payMethod: body.payMethod || '微信支付',
-    fulfillmentMethod: body.fulfillmentMethod || '快递发货',
-    deliveryStatus: body.deliveryStatus || 'pending',
-    createdAt: now(), updatedAt: now()
+async function createOrder(body, authToken = '') {
+  const auth = await requireUserSession(authToken)
+  const sourceItems = Array.isArray(body.items) ? body.items : []
+  if (!sourceItems.length) throw businessError('EMPTY_ORDER', '订单不能为空')
+  const realPayment = isWechatPayEnabled() && body.payMode !== 'mock'
+  if (realPayment && !auth.session.openid) {
+    throw businessError('OPENID_REQUIRED', '当前账号缺少微信 openid，请重新微信登录后支付')
   }
-  await db.collection('orders').add({ data: doc })
 
-  // 扣减库存
-  for (const item of (body.items || [])) {
-    const { data: prods } = await db.collection('products').where({ id: item.productId }).limit(1).get()
-    if (prods.length) {
-      const p = prods[0]
-      const newStock = Math.max(0, (p.stock || 0) - (item.count || 1))
-      await db.collection('products').doc(prods[0]._id).update({
-        data: { stock: newStock, sold: _.inc(item.count || 1), updatedAt: now() }
-      })
+  const mergedItems = []
+  const itemMap = {}
+  for (const source of sourceItems) {
+    const productId = String(source.productId || source.id || '').trim()
+    const count = Math.floor(Number(source.count || 1))
+    if (!productId) throw businessError('INVALID_ORDER_ITEM', '商品信息不完整')
+    if (!Number.isFinite(count) || count < 1) throw businessError('INVALID_ORDER_ITEM', '购买数量不正确')
+    if (itemMap[productId]) {
+      itemMap[productId].count += count
+    } else {
+      itemMap[productId] = { ...source, productId, count }
+      mergedItems.push(itemMap[productId])
     }
   }
 
-  const createdOrder = await getOrder(id)
-  await sendAfterSalesNotice(createdOrder, 'order')
-  return createdOrder
+  const id = createOrderNo()
+  let orderDoc = null
+
+  await db.runTransaction(async transaction => {
+    const orderItems = []
+    let productAmount = 0
+    const timestamp = now()
+
+    for (const item of mergedItems) {
+      const count = Number(item.count || 1)
+      const res = await transaction.collection('products')
+        .where({ id: item.productId, status: 'active', stock: _.gte(count) })
+        .limit(1)
+        .get()
+      if (!res.data.length) {
+        throw businessError('STOCK_NOT_ENOUGH', `${item.name || item.productId}库存不足`)
+      }
+      const product = res.data[0]
+      const limit = Number(product.limit || 0)
+      if (limit > 1 && count > limit) {
+        throw businessError('BUY_LIMIT_EXCEEDED', `${product.name || item.name || item.productId}单次最多购买${limit}份`)
+      }
+      const price = Number(product.price || item.price || 0)
+      productAmount += price * count
+      orderItems.push({
+        productId: product.id || item.productId,
+        count,
+        name: product.name || item.name || '',
+        price,
+        image: product.imageFileID || product.image || item.image || ''
+      })
+      await transaction.collection('products').doc(product._id).update({
+        data: { stock: _.inc(-count), sold: _.inc(count), updatedAt: timestamp }
+      })
+    }
+
+    const deliveryFee = Number(body.deliveryFee || 0)
+    const discount = Number(body.discount || 0)
+    const payable = Math.max(0, productAmount + deliveryFee - discount)
+    const paymentExpiresAt = realPayment ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : ''
+    orderDoc = {
+      id, orderNo: id, buyerId: auth.account.id,
+      status: realPayment ? 'pendingPayment' : (body.status || 'pendingDelivery'),
+      payStatus: realPayment ? 'pending' : (body.payStatus || 'paid'),
+      amount: Number(payable.toFixed(2)),
+      productAmount: Number(productAmount.toFixed(2)), deliveryFee: Number(deliveryFee.toFixed(2)),
+      discount: Number(discount.toFixed(2)), payable: Number(payable.toFixed(2)),
+      address: JSON.stringify(body.address || {}), items: JSON.stringify(orderItems),
+      note: body.note || '', payMethod: body.payMethod || '微信支付',
+      fulfillmentMethod: body.fulfillmentMethod || '快递发货',
+      deliveryStatus: body.deliveryStatus || 'pending',
+      paymentMode: realPayment ? 'wechatPay' : 'mock',
+      paymentExpiresAt,
+      createdAt: timestamp, updatedAt: timestamp
+    }
+
+    await transaction.collection('orders').add({ data: orderDoc })
+  })
+
+  const createdOrder = await getOrder(id, authToken)
+  if (!realPayment) {
+    await sendAfterSalesNotice(createdOrder, 'order')
+    return createdOrder
+  }
+  try {
+    const payment = await createWechatJsapiPayment(createdOrder, auth.session.openid)
+    await db.collection('orders').where({ id }).update({
+      data: { prepayId: payment.prepayId, updatedAt: now() }
+    })
+    return { ...createdOrder, payRequired: true, payment: payment.params }
+  } catch (error) {
+    await rollbackPendingPaymentOrder(id)
+    throw error
+  }
+}
+
+async function createWechatJsapiPayment(order, openid) {
+  const items = Array.isArray(order.items) ? order.items : safeJson(order.items)
+  const description = (items.map(item => item.name).filter(Boolean).join('、') || '初炉烘焙订单').slice(0, 120)
+  const body = {
+    appid: WECHAT_CONFIG.appid,
+    mchid: WECHAT_PAY_CONFIG.mchid,
+    description,
+    out_trade_no: order.id || order.orderNo,
+    time_expire: order.paymentExpiresAt || new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    notify_url: WECHAT_PAY_CONFIG.notifyUrl,
+    amount: {
+      total: amountToFen(order.payable || order.amount),
+      currency: 'CNY'
+    },
+    payer: { openid }
+  }
+  const result = await requestWechatPay('POST', '/v3/pay/transactions/jsapi', body)
+  if (!result.prepay_id) throw businessError('WECHAT_PAY_PREPAY_FAILED', '微信支付预下单失败')
+  return {
+    prepayId: result.prepay_id,
+    params: buildPaymentParams(result.prepay_id)
+  }
+}
+
+async function rollbackPendingPaymentOrder(id) {
+  await db.runTransaction(async transaction => {
+    const res = await transaction.collection('orders').where({ id }).limit(1).get()
+    if (!res.data.length) return
+    const order = res.data[0]
+    if (order.payStatus !== 'pending' || order.status !== 'pendingPayment') return
+    const timestamp = now()
+    const items = safeJson(order.items)
+    for (const item of items) {
+      const count = Number(item.count || 1)
+      if (!item.productId || !Number.isFinite(count) || count <= 0) continue
+      const prods = await transaction.collection('products').where({ id: item.productId }).limit(1).get()
+      if (prods.data.length) {
+        await transaction.collection('products').doc(prods.data[0]._id).update({
+          data: { stock: _.inc(count), sold: _.inc(-count), updatedAt: timestamp }
+        })
+      }
+    }
+    await transaction.collection('orders').doc(order._id).update({
+      data: { status: 'cancelled', payStatus: 'paymentFailed', deliveryStatus: 'cancelled', cancelledAt: timestamp, updatedAt: timestamp }
+    })
+  })
+}
+
+async function queryWechatPayment(orderId) {
+  if (!isWechatPayEnabled()) throw businessError('WECHAT_PAY_CONFIG_MISSING', '微信支付配置不完整')
+  const outTradeNo = encodeURIComponent(orderId)
+  return requestWechatPay('GET', `/v3/pay/transactions/out-trade-no/${outTradeNo}?mchid=${WECHAT_PAY_CONFIG.mchid}`)
+}
+
+async function markOrderPaidByWechat(orderId, payment = {}, authToken = '') {
+  const { data: docs } = await db.collection('orders').where({ id: orderId }).limit(1).get()
+  if (!docs.length) throw businessError('ORDER_NOT_FOUND', '订单不存在')
+  const order = docs[0]
+  if (order.payStatus === 'paid') return authToken ? getOrder(orderId, authToken) : normalizeOrderDoc(order)
+  const paidTotal = payment.amount && Number(payment.amount.total || 0)
+  const expectedTotal = amountToFen(order.payable || order.amount)
+  if (paidTotal && paidTotal !== expectedTotal) {
+    throw businessError('PAY_AMOUNT_MISMATCH', '微信支付金额与订单金额不一致')
+  }
+  const timestamp = now()
+  const patch = {
+    status: 'pendingDelivery',
+    payStatus: 'paid',
+    deliveryStatus: 'pending',
+    transactionId: payment.transaction_id || payment.transactionId || '',
+    tradeState: payment.trade_state || payment.tradeState || 'SUCCESS',
+    paidAt: payment.success_time || payment.paidAt || timestamp,
+    updatedAt: timestamp
+  }
+  await db.collection('orders').doc(order._id).update({ data: patch })
+  const updated = authToken ? await getOrder(orderId, authToken) : normalizeOrderDoc({ ...order, ...patch })
+  await sendAfterSalesNotice(updated, 'order')
+  return updated
+}
+
+async function syncPaymentStatus(id, authToken = '') {
+  const auth = await requireUserSession(authToken)
+  const order = await getOrder(id, authToken)
+  if (!order) throw businessError('ORDER_NOT_FOUND', '订单不存在')
+  if (!canAccessOrder(auth, order)) throw businessError('PERMISSION_DENIED', '无权查看该订单')
+  if (order.payStatus === 'paid') return order
+  const payment = await queryWechatPayment(id)
+  if (payment.trade_state === 'SUCCESS') {
+    return markOrderPaidByWechat(id, payment, authToken)
+  }
+  return { ...order, tradeState: payment.trade_state || '', payStatus: order.payStatus || 'pending' }
+}
+
+async function requestWechatRefund(order = {}, refundNo = '', amount = 0, reason = '') {
+  if (!isWechatPayEnabled() || order.paymentMode !== 'wechatPay') {
+    return { mode: order.paymentMode || 'mock', refundId: '', status: 'accepted' }
+  }
+  const refundAmount = amountToFen(amount || order.payable || order.amount)
+  const totalAmount = amountToFen(order.payable || order.amount)
+  const body = {
+    out_trade_no: order.id || order.orderNo,
+    out_refund_no: refundNo,
+    reason: String(reason || '订单退款').slice(0, 80),
+    amount: {
+      refund: refundAmount,
+      total: totalAmount,
+      currency: 'CNY'
+    }
+  }
+  const result = await requestWechatPay('POST', '/v3/refund/domestic/refunds', body)
+  return {
+    mode: 'wechatPay',
+    refundId: result.refund_id || '',
+    status: result.status || 'PROCESSING',
+    raw: result
+  }
+}
+
+async function rollbackOrderStock(transaction, order, timestamp) {
+  const items = safeJson(order.items)
+  for (const item of items) {
+    const count = Number(item.count || 1)
+    if (!item.productId || !Number.isFinite(count) || count <= 0) continue
+    const prods = await transaction.collection('products').where({ id: item.productId }).limit(1).get()
+    if (prods.data.length) {
+      await transaction.collection('products').doc(prods.data[0]._id).update({
+        data: { stock: _.inc(count), sold: _.inc(-count), updatedAt: timestamp }
+      })
+    }
+  }
 }
 
 async function updateOrder(id, body) {
@@ -463,79 +786,101 @@ async function updateOrder(id, body) {
   return await getOrder(id)
 }
 
-async function updateOrderStatus(id, status) {
+async function updateOrderStatus(id, status, authToken = '') {
+  const auth = await requireUserSession(authToken)
   const { data: docs } = await db.collection('orders').where({ id }).get()
   if (!docs.length) return null
   const order = docs[0]
+  if (!canAccessOrder(auth, order)) throw businessError('PERMISSION_DENIED', '无权操作该订单')
   if (status === 'cancelled') {
-    if (order.status === 'cancelled') return await getOrder(id)
-    if (!['paid', 'pendingDelivery'].includes(order.status)) {
-      throw new Error('当前订单状态不支持取消，请申请售后退款')
+    if (!isAdmin(auth.account.role) && ['paid', 'pendingDelivery'].includes(order.status)) {
+      throw businessError('CANCEL_REQUIRES_APPROVAL', '已付款订单需要提交取消申请，待店长同意后退款')
     }
+    let notifyOrder = null
+    await db.runTransaction(async transaction => {
+      const res = await transaction.collection('orders').where({ id }).limit(1).get()
+      if (!res.data.length) throw businessError('ORDER_NOT_FOUND', '订单不存在')
+      const current = res.data[0]
+      if (current.status === 'cancelled') return
+      if (!canAccessOrder(auth, current)) throw businessError('PERMISSION_DENIED', '无权操作该订单')
+      if (!['pendingPayment', 'paid', 'pendingDelivery'].includes(current.status)) {
+        throw businessError('ORDER_STATUS_INVALID', '当前订单状态不支持取消，请申请售后退款')
+      }
+      const timestamp = now()
+      await rollbackOrderStock(transaction, current, timestamp)
+      const updateData = { status, deliveryStatus: 'cancelled', cancelledAt: timestamp, updatedAt: timestamp }
+      await transaction.collection('orders').doc(current._id).update({ data: updateData })
+      notifyOrder = { ...current, ...updateData }
+    })
+    const updatedOrder = await getOrder(id, authToken)
+    if (notifyOrder) await sendAfterSalesNotice({ ...notifyOrder, ...updatedOrder }, 'cancelled')
+    return updatedOrder
   }
+
+  if (!isAdmin(auth.account.role)) throw businessError('PERMISSION_DENIED', '需要店长权限')
+
   const updateData = { status, updatedAt: now() }
   if (status === 'delivering') updateData.deliveryStatus = 'delivering'
   if (status === 'completed') updateData.deliveryStatus = 'completed'
-  if (status === 'cancelled') {
-    updateData.deliveryStatus = 'cancelled'
-    updateData.cancelledAt = now()
-    // 回补库存
-    const items = safeJson(order.items)
-    for (const item of items) {
-      const { data: prods } = await db.collection('products').where({ id: item.productId }).limit(1).get()
-      if (prods.length) {
-        await db.collection('products').doc(prods[0]._id).update({
-          data: { stock: _.inc(item.count || 1), sold: _.inc(-(item.count || 1)), updatedAt: now() }
-        })
-      }
-    }
-  }
   for (const d of docs) await db.collection('orders').doc(d._id).update({ data: updateData })
-  const updatedOrder = await getOrder(id)
-  if (status === 'cancelled') await sendAfterSalesNotice({ ...order, ...updatedOrder, ...updateData }, 'cancelled')
-  return updatedOrder
+  return await getOrder(id, authToken)
 }
 
 // ==================== 退款 ====================
-async function createRefund(body) {
+async function createRefund(body, authToken = '') {
+  const auth = await requireUserSession(authToken)
   const refundId = `rf${Date.now()}`
   const orderId = String(body.orderId || '').trim()
+  const refundType = body.type === 'cancelOrder' || body.refundType === 'cancelOrder' ? 'cancelOrder' : 'refund'
   if (!orderId) throw new Error('订单编号不能为空')
   const { data: orders } = await db.collection('orders').where({ id: orderId }).limit(1).get()
   const order = orders && orders[0]
   if (!order) throw new Error('订单不存在')
+  if (!canAccessOrder(auth, order)) throw businessError('PERMISSION_DENIED', '无权申请该订单售后')
   if (order.status === 'cancelled') throw new Error('已取消订单无需申请退款')
-  if (!['delivering', 'completed'].includes(order.status)) throw new Error('当前订单状态不支持申请退款')
+  if (refundType === 'cancelOrder') {
+    if (!['paid', 'pendingDelivery'].includes(order.status) && order.payStatus !== 'paid') {
+      throw new Error('当前订单状态不支持申请取消')
+    }
+  } else if (!['delivering', 'completed'].includes(order.status)) {
+    throw new Error('当前订单状态不支持申请退款')
+  }
   if (order.refundStatus === 'pending') throw new Error('退款申请已提交，请勿重复申请')
+  const refundAmount = Number(body.amount || order.payable || order.amount || 0)
+  const reasonText = body.reasonText || (refundType === 'cancelOrder' ? '用户申请取消订单，待店长同意后退款' : '')
   await db.collection('refunds').add({
     data: {
-      id: refundId, refundNo: body.refundNo || refundId, orderId, buyerId: body.buyerId || order.buyerId || '',
-      reason: body.reason || '', reasonText: body.reasonText || '', refundDesc: body.refundDesc || '',
+      id: refundId, refundNo: body.refundNo || refundId, orderId, buyerId: auth.account.id || order.buyerId || '',
+      type: refundType, refundType,
+      reason: body.reason || (refundType === 'cancelOrder' ? 'cancel_order' : ''), reasonText, refundDesc: body.refundDesc || '',
       contactPhone: body.contactPhone || '', remark: body.remark || '', status: 'pending',
-      amount: body.amount || 0, createdAt: now(), updatedAt: now()
+      amount: refundAmount, createdAt: now(), updatedAt: now()
     }
   })
   await db.collection('orders').doc(order._id).update({
     data: {
       refundStatus: 'pending',
+      refundType,
       refundNo: body.refundNo || refundId,
-      refundAmount: body.amount || 0,
-      refundReasonText: body.reasonText || '',
+      refundAmount,
+      refundReasonText: reasonText,
       updatedAt: now()
     }
   })
   await sendAfterSalesNotice({
     ...order,
     refundStatus: 'pending',
+    refundType,
     refundNo: body.refundNo || refundId,
-    refundAmount: body.amount || 0,
-    refundReasonText: body.reasonText || '',
+    refundAmount,
+    refundReasonText: reasonText,
     updatedAt: now()
   }, 'refund')
   return { id: refundId, status: 'pending' }
 }
 
-async function updateRefundStatus(body = {}) {
+async function updateRefundStatus(body = {}, authToken = '') {
+  await requireAdminSession(authToken)
   const orderId = String(body.orderId || '').trim()
   const status = String(body.status || '').trim()
   if (!orderId) throw new Error('订单编号不能为空')
@@ -545,6 +890,12 @@ async function updateRefundStatus(body = {}) {
   const order = orders && orders[0]
   if (!order) throw new Error('订单不存在')
   if (order.refundStatus !== 'pending') throw new Error('当前订单没有待处理售后')
+  const refundType = order.refundType === 'cancelOrder' ? 'cancelOrder' : 'refund'
+  const refundAmount = Number(order.refundAmount || order.payable || order.amount || 0)
+  let wechatRefund = null
+  if (status === 'approved' && refundAmount > 0 && order.payStatus === 'paid') {
+    wechatRefund = await requestWechatRefund(order, order.refundNo || `rf${Date.now()}`, refundAmount, order.refundReasonText || '订单退款')
+  }
 
   const updateData = {
     refundStatus: status,
@@ -552,9 +903,34 @@ async function updateRefundStatus(body = {}) {
     refundHandleRemark: body.remark || '',
     updatedAt: now()
   }
-  if (status === 'approved') updateData.payStatus = 'refunded'
+  if (status === 'approved') {
+    updateData.payStatus = 'refunded'
+    updateData.refundedAt = now()
+    if (wechatRefund) {
+      updateData.wechatRefundId = wechatRefund.refundId || ''
+      updateData.wechatRefundStatus = wechatRefund.status || ''
+    }
+  }
 
-  await db.collection('orders').doc(order._id).update({ data: updateData })
+  if (status === 'approved' && refundType === 'cancelOrder') {
+    await db.runTransaction(async transaction => {
+      const res = await transaction.collection('orders').where({ id: orderId }).limit(1).get()
+      if (!res.data.length) throw businessError('ORDER_NOT_FOUND', '订单不存在')
+      const current = res.data[0]
+      const timestamp = now()
+      if (current.status !== 'cancelled') await rollbackOrderStock(transaction, current, timestamp)
+      await transaction.collection('orders').doc(current._id).update({
+        data: {
+          ...updateData,
+          status: 'cancelled',
+          deliveryStatus: 'cancelled',
+          cancelledAt: current.cancelledAt || timestamp
+        }
+      })
+    })
+  } else {
+    await db.collection('orders').doc(order._id).update({ data: updateData })
+  }
 
   const refundQuery = order.refundNo
     ? _.or([{ orderId }, { refundNo: order.refundNo }])
@@ -566,12 +942,14 @@ async function updateRefundStatus(body = {}) {
         status,
         handledAt: now(),
         handleRemark: body.remark || '',
+        wechatRefundId: wechatRefund && wechatRefund.refundId ? wechatRefund.refundId : '',
+        wechatRefundStatus: wechatRefund && wechatRefund.status ? wechatRefund.status : '',
         updatedAt: now()
       }
     })
   }
 
-  return await getOrder(orderId)
+  return await getOrder(orderId, authToken)
 }
 
 // ==================== 评价 ====================
@@ -609,16 +987,23 @@ async function submitReview(authToken, body = {}) {
 }
 
 // ==================== 团购 ====================
-async function listGroups(params = {}) {
+async function listGroups(params = {}, authToken = '') {
+  const auth = await getAccountByToken(authToken)
   const query = {}
-  if (params.status && params.status !== 'all') query.status = params.status
+  if (isAdmin(auth && auth.account && auth.account.role)) {
+    if (params.status && params.status !== 'all') query.status = params.status
+  } else {
+    query.status = 'active'
+  }
   const { data } = await db.collection('groups').where(query).orderBy('createdAt', 'desc').limit(1000).get()
   return data.filter(row => !isPlaceholderDoc(row))
 }
 
-async function getGroup(id) {
+async function getGroup(id, authToken = '') {
+  const auth = await getAccountByToken(authToken)
   const { data } = await db.collection('groups').where({ id }).limit(1).get()
   const group = data.find(row => !isPlaceholderDoc(row))
+  if (group && group.status && group.status !== 'active' && !isAdmin(auth && auth.account && auth.account.role)) return null
   return group || null
 }
 
@@ -677,12 +1062,12 @@ async function listStock(params = {}) {
   return data
 }
 
-async function generateStock(date = '') {
+async function generateStock(date = '', authToken = '') {
   const targetDate = String(date || now().slice(0, 10)).slice(0, 10)
   await ensureCollection('stockItems')
   const [products, orders] = await Promise.all([
-    listProducts({ status: 'active' }),
-    listOrders({})
+    listProducts({ status: 'active' }, authToken),
+    listOrders({}, authToken)
   ])
   const productMap = products.reduce((map, product) => {
     map[product.id] = product
@@ -779,12 +1164,6 @@ async function updateShopConfig(body) {
 }
 
 // ==================== 订阅消息 ====================
-async function requireAdminSession(authToken) {
-  const auth = await getAccountByToken(authToken)
-  if (!auth || !auth.account || !isAdmin(auth.account.role)) throw new Error('需要店长权限')
-  return auth
-}
-
 async function getAdminSubscriptionStatus(authToken) {
   const auth = await requireAdminSession(authToken)
   const config = await getShopConfig()
@@ -890,7 +1269,7 @@ async function sendAfterSalesNotice(order = {}, scene = 'refund') {
     const data = {
       thing1: { value: truncateNoticeValue(title, 20) },
       character_string2: { value: truncateNoticeValue(order.id || order.orderNo || order._id || '-', 32) },
-      amount3: { value: `${amount.toFixed(amount % 1 === 0 ? 0 : 1)}元` },
+      amount3: { value: `${amount.toFixed(2)}元` },
       thing4: { value: truncateNoticeValue(customer, 20) },
       time5: { value: noticeTimeText(order.updatedAt || order.cancelledAt || order.createdAt) }
     }
@@ -912,8 +1291,14 @@ async function sendAfterSalesNotice(order = {}, scene = 'refund') {
 }
 
 // ==================== 地址 ====================
-async function listAddresses(userId) {
-  const query = userId ? { userId } : {}
+async function listAddresses(userId, authToken = '') {
+  const auth = await requireUserSession(authToken)
+  const query = {}
+  if (isAdmin(auth.account.role)) {
+    if (userId) query.userId = userId
+  } else {
+    query.userId = auth.account.id
+  }
   const { data } = await db.collection('addresses').where(query).orderBy('isDefault', 'desc').limit(100).get()
   return data
 }
@@ -924,16 +1309,21 @@ async function findAddressDocs(id) {
   return data || []
 }
 
-async function getAddress(id) {
+async function getAddress(id, authToken = '') {
+  const auth = await requireUserSession(authToken)
   const data = await findAddressDocs(id)
+  if (data.length && !isAdmin(auth.account.role) && data[0].userId !== auth.account.id) {
+    throw businessError('PERMISSION_DENIED', '无权查看该地址')
+  }
   return data.length ? data[0] : null
 }
 
-async function createAddress(body) {
+async function createAddress(body, authToken = '') {
+  const auth = await requireUserSession(authToken)
   const id = body.id || `addr${Date.now()}`
   const addressText = body.address || body.detail || [body.province, body.city, body.district, body.detail].filter(Boolean).join('')
   const doc = {
-    id, userId: body.userId || '', receiver: body.receiver || '', phone: body.phone || '',
+    id, userId: isAdmin(auth.account.role) && body.userId ? body.userId : auth.account.id, receiver: body.receiver || '', phone: body.phone || '',
     province: body.province || '', city: body.city || '', district: body.district || '',
     detail: body.detail || addressText, address: addressText,
     tag: body.tag || '', note: body.note || '',
@@ -941,13 +1331,15 @@ async function createAddress(body) {
     createdAt: now(), updatedAt: now()
   }
   await db.collection('addresses').add({ data: doc })
-  return await getAddress(id)
+  return await getAddress(id, authToken)
 }
 
-async function updateAddress(id, body) {
+async function updateAddress(id, body, authToken = '') {
+  const auth = await requireUserSession(authToken)
   const addressText = body.address || body.detail || [body.province, body.city, body.district, body.detail].filter(Boolean).join('')
   const updateData = { ...body, updatedAt: now() }
   delete updateData._id
+  delete updateData.userId
   if (addressText) {
     updateData.address = addressText
     if (!updateData.detail) updateData.detail = addressText
@@ -955,17 +1347,20 @@ async function updateAddress(id, body) {
   if (updateData.isDefault !== undefined) updateData.isDefault = updateData.isDefault ? 1 : 0
   const docs = await findAddressDocs(id)
   if (!docs.length) return null
+  if (!isAdmin(auth.account.role) && docs[0].userId !== auth.account.id) throw businessError('PERMISSION_DENIED', '无权修改该地址')
   if (updateData.isDefault && docs[0].userId) {
     try {
       await db.collection('addresses').where({ userId: docs[0].userId, isDefault: 1 }).update({ data: { isDefault: 0, updatedAt: now() } })
     } catch {}
   }
   for (const d of docs) await db.collection('addresses').doc(d._id).update({ data: updateData })
-  return await getAddress(id)
+  return await getAddress(id, authToken)
 }
 
-async function deleteAddress(id) {
+async function deleteAddress(id, authToken = '') {
+  const auth = await requireUserSession(authToken)
   const docs = await findAddressDocs(id)
+  if (docs.length && !isAdmin(auth.account.role) && docs[0].userId !== auth.account.id) throw businessError('PERMISSION_DENIED', '无权删除该地址')
   for (const d of docs) await db.collection('addresses').doc(d._id).remove()
   return { ok: true }
 }
@@ -1068,64 +1463,65 @@ exports.main = async (event, context) => {
       case 'promoteAllUsersToManager': return await promoteAllUsersToManager(authToken)
 
       // 商品
-      case 'listProducts': return { ok: true, data: await listProducts(payload) }
-      case 'getProduct': return { ok: true, data: await getProduct(payload.id) }
-      case 'createProduct': return { ok: true, data: await createProduct(payload) }
-      case 'updateProduct': return { ok: true, data: await updateProduct(payload.id, payload) }
-      case 'deleteProduct': return await deleteProduct(payload.id)
+      case 'listProducts': return { ok: true, data: await listProducts(payload, authToken) }
+      case 'getProduct': return { ok: true, data: await getProduct(payload.id, authToken) }
+      case 'createProduct': await requireAdminSession(authToken); return { ok: true, data: await createProduct(payload) }
+      case 'updateProduct': await requireAdminSession(authToken); return { ok: true, data: await updateProduct(payload.id, payload) }
+      case 'deleteProduct': await requireAdminSession(authToken); return await deleteProduct(payload.id)
 
       // 订单
-      case 'listOrders': return { ok: true, data: await listOrders(payload) }
-      case 'getOrder': return { ok: true, data: await getOrder(payload.id) }
-      case 'createOrder': return { ok: true, data: await createOrder(payload) }
-      case 'updateOrder': return { ok: true, data: await updateOrder(payload.id, payload) }
-      case 'updateOrderStatus': return { ok: true, data: await updateOrderStatus(payload.id, payload.status) }
-      case 'createRefund': return { ok: true, data: await createRefund(payload) }
-      case 'updateRefundStatus': return { ok: true, data: await updateRefundStatus(payload) }
+      case 'listOrders': return { ok: true, data: await listOrders(payload, authToken) }
+      case 'getOrder': return { ok: true, data: await getOrder(payload.id, authToken) }
+      case 'createOrder': return { ok: true, data: await createOrder(payload, authToken) }
+      case 'updateOrder': await requireAdminSession(authToken); return { ok: true, data: await updateOrder(payload.id, payload) }
+      case 'updateOrderStatus': return { ok: true, data: await updateOrderStatus(payload.id, payload.status, authToken) }
+      case 'syncPaymentStatus': return { ok: true, data: await syncPaymentStatus(payload.id, authToken) }
+      case 'createRefund': return { ok: true, data: await createRefund(payload, authToken) }
+      case 'updateRefundStatus': return { ok: true, data: await updateRefundStatus(payload, authToken) }
       case 'submitReview': return await submitReview(authToken, payload)
       case 'createReview': return await submitReview(authToken, payload)
 
       // 团购
-      case 'listGroups': return { ok: true, data: await listGroups(payload) }
-      case 'getGroup': return { ok: true, data: await getGroup(payload.id) }
-      case 'createGroup': return { ok: true, data: await createGroup(payload) }
-      case 'updateGroupStatus': return { ok: true, data: await updateGroupStatus(payload.id, payload.status) }
-      case 'deleteGroup': return await deleteGroup(payload.id)
+      case 'listGroups': return { ok: true, data: await listGroups(payload, authToken) }
+      case 'getGroup': return { ok: true, data: await getGroup(payload.id, authToken) }
+      case 'createGroup': await requireAdminSession(authToken); return { ok: true, data: await createGroup(payload) }
+      case 'updateGroupStatus': await requireAdminSession(authToken); return { ok: true, data: await updateGroupStatus(payload.id, payload.status) }
+      case 'deleteGroup': await requireAdminSession(authToken); return await deleteGroup(payload.id)
 
       // 备货
-      case 'listStock': return { ok: true, data: await listStock(payload) }
-      case 'generateStock': return { ok: true, data: await generateStock(payload.date) }
-      case 'updateStock': return { ok: true, data: await updateStock(payload.id, payload) }
+      case 'listStock': await requireAdminSession(authToken); return { ok: true, data: await listStock(payload) }
+      case 'generateStock': await requireAdminSession(authToken); return { ok: true, data: await generateStock(payload.date, authToken) }
+      case 'updateStock': await requireAdminSession(authToken); return { ok: true, data: await updateStock(payload.id, payload) }
 
       // 统计
-      case 'statsToday': return { ok: true, data: await statsToday() }
+      case 'statsToday': await requireAdminSession(authToken); return { ok: true, data: await statsToday() }
 
       // 店铺配置
       case 'getShopConfig': return { ok: true, data: await getShopConfig() }
-      case 'updateShopConfig': return { ok: true, data: await updateShopConfig(payload) }
+      case 'updateShopConfig': await requireAdminSession(authToken); return { ok: true, data: await updateShopConfig(payload) }
 
       // 订阅消息
       case 'getAdminSubscriptionStatus': return { ok: true, data: await getAdminSubscriptionStatus(authToken) }
       case 'saveAdminSubscription': return { ok: true, data: await saveAdminSubscription(authToken, payload) }
 
       // 地址
-      case 'listAddresses': return { ok: true, data: await listAddresses(payload.userId) }
-      case 'getAddress': return { ok: true, data: await getAddress(payload.id) }
-      case 'createAddress': return { ok: true, data: await createAddress(payload) }
-      case 'updateAddress': return { ok: true, data: await updateAddress(payload.id, payload) }
-      case 'deleteAddress': return await deleteAddress(payload.id)
+      case 'listAddresses': return { ok: true, data: await listAddresses(payload.userId, authToken) }
+      case 'getAddress': return { ok: true, data: await getAddress(payload.id, authToken) }
+      case 'createAddress': return { ok: true, data: await createAddress(payload, authToken) }
+      case 'updateAddress': return { ok: true, data: await updateAddress(payload.id, payload, authToken) }
+      case 'deleteAddress': return await deleteAddress(payload.id, authToken)
 
       // 轮播
       case 'getBannerConfig': return { ok: true, data: await getBannerConfig() }
-      case 'updateBannerConfig': return { ok: true, data: await updateBannerConfig(payload) }
+      case 'updateBannerConfig': await requireAdminSession(authToken); return { ok: true, data: await updateBannerConfig(payload) }
       case 'listBanners': return { ok: true, data: await listBanners() }
-      case 'updateBanners': return { ok: true, data: await updateBanners(payload) }
+      case 'updateBanners': await requireAdminSession(authToken); return { ok: true, data: await updateBanners(payload) }
 
       default:
         return { ok: true, message: `Unknown action: ${action}` }
     }
   } catch (error) {
     console.error(`[businessApi] Error in ${action}:`, error)
-    return { ok: false, code: 'SERVER_ERROR', message: error.message || '服务器异常' }
+    return { ok: false, code: error.code || 'SERVER_ERROR', message: error.message || '服务器异常' }
   }
 }

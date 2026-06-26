@@ -59,7 +59,7 @@
 <script>
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import { productAPI, shopAPI } from '@/services/apiClient'
-import { ensurePageAccess } from '@/utils/auth'
+import { ensurePageAccess, getAuthSession } from '@/utils/auth'
 
 export default {
   components: { CustomNavBar },
@@ -80,6 +80,10 @@ export default {
     this.loadData()
   },
   methods: {
+    authToken() {
+      const session = getAuthSession()
+      return session && session.token ? session.token : ''
+    },
     async loadData() {
       try {
         // 获取分类（从店铺配置）
@@ -91,7 +95,7 @@ export default {
         ]
 
         // 获取商品统计
-        this.products = await productAPI.list({}) || []
+        this.products = await productAPI.list({}, this.authToken()) || []
       } catch (e) {
         console.error('加载失败:', e)
         // 使用默认分类
@@ -177,7 +181,7 @@ export default {
     },
     async saveCategories(categories) {
       const shop = await shopAPI.get()
-      await shopAPI.update({ ...shop, categories })
+      await shopAPI.update({ ...shop, categories }, this.authToken())
     }
   }
 }

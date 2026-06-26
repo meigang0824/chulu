@@ -12,6 +12,11 @@ const STORAGE_KEYS = {
   portalMode: 'app_portal_mode'
 }
 
+function authToken() {
+  const session = getAuthSession()
+  return session && session.token ? session.token : ''
+}
+
 function bySort(a, b) {
   return Number(a.sort || 0) - Number(b.sort || 0)
 }
@@ -72,6 +77,7 @@ function isToday(value) {
 }
 
 function statusMeta(status = '', deliveryStatus = '') {
+  if (status === 'pendingPayment') return { status: 'pendingPayment', statusText: '待支付', payStatusText: '待支付' }
   if (status === 'completed' || deliveryStatus === 'completed') return { status: 'completed', statusText: '已完成', payStatusText: '已付款' }
   if (status === 'delivering' || deliveryStatus === 'delivering') return { status: 'delivering', statusText: '已发货', payStatusText: '已付款' }
   if (status === 'cancelled') return { status: 'cancelled', statusText: '已取消', payStatusText: '已取消' }
@@ -80,6 +86,14 @@ function statusMeta(status = '', deliveryStatus = '') {
 }
 
 function buildProgress(order) {
+  if (order.status === 'pendingPayment') {
+    return [
+      { key: 'created', text: '订单已创建', subText: dateText(order.createdAt, order.createTime), done: true },
+      { key: 'paid', text: '待支付', subText: '请完成微信支付', done: false, active: true },
+      { key: 'stocking', text: '备货中', subText: '支付后开始制作', done: false },
+      { key: 'delivery', text: '待发货', subText: order.deliveryTime || order.deliveryText || '等待打包发货', done: false }
+    ]
+  }
   if (order.status === 'cancelled') {
     return [
       { key: 'created', text: '下单成功', subText: dateText(order.createdAt, order.createTime), done: true },
@@ -173,6 +187,7 @@ function normalizeOrder(row = {}, productMap = {}) {
     trackingNo: row.trackingNo || '',
     note: row.note || '无',
     refundStatus: row.refundStatus || '',
+    refundType: row.refundType || '',
     refundNo: row.refundNo || '',
     refundAmount: Number(row.refundAmount || 0),
     refundReasonText: row.refundReasonText || '',
@@ -320,7 +335,7 @@ export async function getProducts() {
 }
 
 export async function getAdminProducts() {
-  const rows = await productAPI.list({})
+  const rows = await productAPI.list({}, authToken())
   return Promise.all((rows || []).filter(validRow).map(row => hydrateProductImages(normalizeProduct(row))))
 }
 
@@ -330,7 +345,7 @@ export async function getProductById(id) {
 }
 
 export async function getAdminProductById(id) {
-  const row = await productAPI.get(id)
+  const row = await productAPI.get(id, authToken())
   if (row) return hydrateProductImages(normalizeProduct(row))
   const products = await getAdminProducts()
   return products.find(item => item.id === id || item._id === id || item.docId === id) || null
@@ -354,13 +369,13 @@ export async function getCategories() {
 
 export async function saveProduct(product) {
   if (product.id) {
-    return productAPI.update(product.id, product)
+    return productAPI.update(product.id, product, authToken())
   }
-  return productAPI.create(product)
+  return productAPI.create(product, authToken())
 }
 
 export async function saveGroup(group) {
-  return groupAPI.create(group)
+  return groupAPI.create(group, authToken())
 }
 
 export async function getActiveGroups() {
@@ -374,11 +389,11 @@ export async function getGroupProducts() {
 }
 
 export async function updateProductStatus(productId, status) {
-  return productAPI.update(productId, { status })
+  return productAPI.update(productId, { status }, authToken())
 }
 
 export async function deleteProduct(productId) {
-  return productAPI.delete(productId)
+  return productAPI.delete(productId, authToken())
 }
 
 export async function getBannerConfigFromCloud() {
@@ -397,7 +412,7 @@ export async function getDisplayBannerConfigFromCloud() {
 export async function getHomeData() {
   try {
     const [orders, bannerConfig, activeGroups] = await Promise.all([
-      orderAPI.list({}),
+      orderAPI.list({}, authToken()).catch(() => []),
       getBannerConfigFromCloud(),
       getActiveGroups().catch(() => []),
     ])
@@ -438,11 +453,22 @@ export async function createOrder(payload) {
   const session = getAuthSession()
   const user = (session && session.user) || {}
   const buyerId = user.id || payload.buyerId || ''
-  return orderAPI.create({ ...payload, buyerId })
+  return orderAPI.create({ ...payload, buyerId }, authToken())
 }
 
 export async function cancelBuyerOrder(orderId) {
-  return orderAPI.updateStatus(orderId, 'cancelled')
+  return orderAPI.createRefund({
+    orderId,
+    type: 'cancelOrder',
+    refundType: 'cancelOrder',
+    reason: 'cancel_order',
+    reasonText: '申请取消订单',
+    refundDesc: '用户申请取消订单，待店长同意后退款'
+  }, authToken())
+}
+
+export async function syncPaymentStatus(orderId) {
+  return orderAPI.syncPaymentStatus(orderId, authToken())
 }
 
 export async function getBuyerOrders(status = 'all') {
@@ -452,7 +478,7 @@ export async function getBuyerOrders(status = 'all') {
     const where = status === 'all' ? {} : { status }
     if (buyerId) where.buyerId = buyerId
     const [rows, products] = await Promise.all([
-      orderAPI.list(where),
+      orderAPI.list(where, authToken()),
       getProducts(),
     ])
     const productMap = products.reduce((map, item) => { map[item.id] = item; return map }, {})
@@ -464,7 +490,7 @@ export async function getBuyerOrders(status = 'all') {
 
 export async function getBuyerOrderById(id) {
   try {
-    const row = await orderAPI.get(id)
+    const row = await orderAPI.get(id, authToken())
     const products = await getProducts()
     const productMap = products.reduce((map, item) => { map[item.id] = item; return map }, {})
     return hydrateOrderImages(normalizeOrder(row, productMap))
@@ -476,7 +502,7 @@ export async function getBuyerOrderById(id) {
 export async function getAdminOrders(status = 'all') {
   try {
     const [rows, products] = await Promise.all([
-      orderAPI.list({}),
+      orderAPI.list({}, authToken()),
       getProducts(),
     ])
     const productMap = products.reduce((map, item) => { map[item.id] = item; return map }, {})
@@ -493,11 +519,11 @@ export async function getAdminOrderById(id) {
 }
 
 export async function updateOrderStatus(orderId, status) {
-  return orderAPI.updateStatus(orderId, status)
+  return orderAPI.updateStatus(orderId, status, authToken())
 }
 
 export async function getBuyerActivities(productId = '', limit = 6) {
-  const orders = await orderAPI.list({})
+  const orders = await orderAPI.list({}, authToken()).catch(() => [])
   const normalized = await Promise.all((orders || []).map(o => hydrateOrderImages(normalizeOrder(o))))
   const activities = buildActivities(normalized, 0).filter(item => !productId || item.productId === productId)
   return limit ? activities.slice(0, limit) : activities
@@ -516,7 +542,7 @@ export async function getDefaultAddress() {
 export async function getAddresses() {
   try {
     const userId = (getAuthSession() && getAuthSession().user && getAuthSession().user.id) || 'buyer001'
-    const rows = await addressAPI.list(userId)
+    const rows = await addressAPI.list(userId, authToken())
     return (rows || []).map(normalizeAddress)
   } catch {
     return []
@@ -528,25 +554,25 @@ export async function saveAddress(address) {
   const id = address.id || address._id
   const data = { ...address, id, userId }
   if (id) {
-    return addressAPI.update(id, data)
+    return addressAPI.update(id, data, authToken())
   }
-  return addressAPI.create(data)
+  return addressAPI.create(data, authToken())
 }
 
 export async function setDefaultAddress(id) {
-  return addressAPI.update(id, { isDefault: true })
+  return addressAPI.update(id, { isDefault: true }, authToken())
 }
 
 export async function deleteAddress(id) {
-  return addressAPI.delete(id)
+  return addressAPI.delete(id, authToken())
 }
 
 export async function submitRefundRequest(payload) {
-  return orderAPI.createRefund(payload)
+  return orderAPI.createRefund(payload, authToken())
 }
 
 export async function handleRefundRequest(orderId, status, remark = '') {
-  return orderAPI.updateRefundStatus({ orderId, status, remark })
+  return orderAPI.updateRefundStatus({ orderId, status, remark }, authToken())
 }
 
 // ==================== 店铺配置 ====================
@@ -628,7 +654,7 @@ export async function saveShopConfigToCloud(config) {
       ...(config.adminHero || {}),
       image: (config.adminHero && config.adminHero.imageFileID) || normalizeImageUrl(config.adminHero && config.adminHero.image, DEFAULT_SHOP_CONFIG.adminHero.image)
     }
-  })
+  }, authToken())
   return { ok: true }
 }
 
@@ -688,14 +714,14 @@ export async function getShopAboutData() {
 // ==================== 团购 ====================
 export async function saveBannerConfigToCloud(config) {
   const normalized = normalizeBannerData(config)
-  const saved = await bannerAPI.updateConfig(normalized)
+  const saved = await bannerAPI.updateConfig(normalized, authToken())
   return normalizeBannerData(saved || normalized)
 }
 
 // ==================== 备货 ====================
 export async function getStockList() {
   try {
-    const rows = await stockAPI.list({})
+    const rows = await stockAPI.list({}, authToken())
     return rows || []
   } catch {
     return []
@@ -705,8 +731,8 @@ export async function getStockList() {
 export async function getStockData() {
   try {
     const today = new Date().toISOString().slice(0, 10)
-    await stockAPI.generate(today).catch(() => {})
-    const rows = await stockAPI.list({ date: today })
+    await stockAPI.generate(today, authToken()).catch(() => {})
+    const rows = await stockAPI.list({ date: today }, authToken())
     const products = await getProducts()
     const productMap = products.reduce((map, item) => { map[item.id] = item; return map }, {})
 
@@ -749,7 +775,7 @@ export async function getStockData() {
 }
 
 export async function updateStockItem(productId, patch) {
-  return stockAPI.update(productId, patch)
+  return stockAPI.update(productId, patch, authToken())
 }
 
 // ==================== 管理面板 ====================
@@ -765,7 +791,7 @@ export async function getAdminDashboardData() {
   const groupProducts = extractGroupProducts(activeGroups)
   const refundOrders = orders.filter(item => item.refundStatus === 'pending')
   const cancelledOrders = orders.filter(item => item.status === 'cancelled')
-  const afterSalesCount = refundOrders.length + cancelledOrders.length
+  const afterSalesCount = refundOrders.length
 
   return {
     orders,
@@ -774,7 +800,7 @@ export async function getAdminDashboardData() {
     products: groupProducts,
     dashboardStats: [
       { key: 'orders', label: '今日订单', value: todayOrders.length, unit: '单', trend: '', trendType: 'up', icon: 'receipt', theme: 'red' },
-      { key: 'sales', label: '今日销售额', value: todaySales.toFixed(1), unit: '元', trend: '', trendType: 'up', icon: 'yuan', theme: 'orange' },
+      { key: 'sales', label: '今日销售额', value: todaySales.toFixed(2), unit: '元', trend: '', trendType: 'up', icon: 'yuan', theme: 'orange' },
       { key: 'delivery', label: '待发货', value: orders.filter(item => item.status === 'pendingDelivery' || item.status === 'paid').length, unit: '单', trend: '', trendType: 'up', icon: 'truck', theme: 'blue' },
       { key: 'afterSales', label: '售后/取消', value: afterSalesCount, unit: '单', trend: '', trendType: 'up', icon: 'receipt', theme: 'orange' }
     ],
@@ -794,9 +820,9 @@ export async function getAdminStatsData() {
     .slice(0, 5)
   return {
     overview: [
-      { key: 'sales', label: '累计销售额', value: totalSales.toFixed(1), unit: '元' },
+      { key: 'sales', label: '累计销售额', value: totalSales.toFixed(2), unit: '元' },
       { key: 'orders', label: '订单总数', value: orders.length, unit: '单' },
-      { key: 'completed', label: '已完成销售额', value: completedSales.toFixed(1), unit: '元' },
+      { key: 'completed', label: '已完成销售额', value: completedSales.toFixed(2), unit: '元' },
       { key: 'products', label: '上架商品数', value: activeProducts, unit: '个' }
     ],
     statusStats: [
@@ -941,7 +967,7 @@ export async function setupCloudDatabase() {
 // ==================== 地址管理 ====================
 export async function getUserAddresses(userId) {
   try {
-    return await addressAPI.list(userId)
+    return await addressAPI.list(userId, authToken())
   } catch {
     return []
   }
@@ -949,7 +975,7 @@ export async function getUserAddresses(userId) {
 
 export async function getAddressById(id) {
   try {
-    return await addressAPI.get(id)
+    return await addressAPI.get(id, authToken())
   } catch {
     return null
   }

@@ -3,7 +3,7 @@
     <view class="order-card__head">
       <view class="order-card__id">订单号：{{ order.id }}</view>
       <view class="order-card__tags">
-        <StatusTag v-if="order.refundStatus === 'pending'" type="refund" text="售后中" />
+        <StatusTag v-if="order.refundStatus === 'pending'" type="refund" :text="order.refundType === 'cancelOrder' ? '取消审核中' : '售后中'" />
         <StatusTag v-else-if="order.refundStatus === 'approved'" type="refundApproved" text="已同意退款" />
         <StatusTag v-else-if="order.refundStatus === 'rejected'" type="refundRejected" text="已拒绝售后" />
         <StatusTag :type="order.status" :text="order.statusText" />
@@ -24,7 +24,7 @@
       </view>
       <view class="order-card__amount">
         <view class="order-card__amount-label">实付金额</view>
-        <view class="order-card__amount-value">￥{{ order.payable || order.amount }}</view>
+        <view class="order-card__amount-value">￥{{ money(order.payable || order.amount) }}</view>
       </view>
     </view>
 
@@ -49,6 +49,7 @@
 
 <script>
 import StatusTag from '@/components/StatusTag/StatusTag.vue'
+import { money } from '@/utils/format'
 
 export default {
   name: 'OrderCard',
@@ -80,7 +81,8 @@ export default {
       if (this.order.status === 'delivering') return '标记完成'
       return '标记发货'
     }
-  }
+  },
+  methods: { money }
 }
 </script>
 

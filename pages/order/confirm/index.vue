@@ -14,7 +14,7 @@
             <StatusTag type="normal" text="团购价" size="sm" plain />
           </view>
           <view class="goods-row__meta">
-            <text class="goods-row__price">￥{{ item.price }}</text>
+            <text class="goods-row__price">￥{{ money(item.price) }}</text>
             <text class="goods-row__count">x{{ item.count }}</text>
           </view>
         </view>
@@ -34,19 +34,19 @@
     <view class="fee card">
       <view class="fee__row">
         <text>商品金额</text>
-        <text>￥{{ amount.productAmount }}</text>
+        <text>￥{{ money(amount.productAmount) }}</text>
       </view>
       <view class="fee__row">
         <text>配送费</text>
-        <text>￥{{ amount.deliveryFee }}</text>
+        <text>￥{{ money(amount.deliveryFee) }}</text>
       </view>
       <view class="fee__row">
         <text>团购优惠</text>
-        <text class="minus">-￥{{ amount.discount }}</text>
+        <text class="minus">-￥{{ money(amount.discount) }}</text>
       </view>
       <view class="fee__total">
         <text>合计</text>
-        <text>￥{{ amount.payable }}</text>
+        <text>￥{{ money(amount.payable) }}</text>
       </view>
     </view>
 
@@ -54,8 +54,8 @@
 
     <view class="bottom-pay">
       <view class="bottom-pay__amount">
-        <view>实付款：<text>￥{{ amount.payable }}</text></view>
-        <view>{{ addressReady ? `已优惠 ￥${amount.discount}` : '请先选择收货地址' }}</view>
+        <view>实付款：<text>￥{{ money(amount.payable) }}</text></view>
+        <view>{{ addressReady ? `已优惠 ￥${money(amount.discount)}` : '请先选择收货地址' }}</view>
       </view>
       <button :class="{ 'is-disabled': !addressReady }" @tap="pay">{{ addressReady ? checkoutText.payText : '选择地址后下单' }}</button>
     </view>
@@ -67,10 +67,11 @@ import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import AddressCard from '@/components/AddressCard/AddressCard.vue'
 import StatusTag from '@/components/StatusTag/StatusTag.vue'
 import { calcOrderAmount } from '@/utils/calc'
-import { createOrder, getDefaultAddress, getProductById, getShopConfig } from '@/services/dataService'
+import { createOrder, getDefaultAddress, getProductById, getShopConfig, syncPaymentStatus } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess, requireLogin } from '@/utils/auth'
 import { clearCheckoutItems, getCheckoutItems, removeCartItems } from '@/utils/shopState'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar, AddressCard, StatusTag },
@@ -90,7 +91,7 @@ export default {
       return calcOrderAmount(this.orderItems, this.checkout.deliveryFee, this.checkout.groupDiscount)
     },
     productTotal() {
-      return this.amount.productAmount.toFixed(2)
+      return money(this.amount.productAmount)
     },
     checkoutText() {
       return {
@@ -156,6 +157,7 @@ export default {
       if (!text || text === 'undefined' || text === 'null') return fallback
       return text
     },
+    money,
     normalizeCount() {
       const max = this.stepperMax || 1
       const next = Math.min(Math.max(Number(this.count) || 1, 1), max)
@@ -163,7 +165,7 @@ export default {
     },
     itemTotal(item) {
       const total = Number(item.price || 0) * Number(item.count || 0)
-      return total.toFixed(2)
+      return money(total)
     },
     pickDeliveryTime() {
       const options = ['明日配送', '后天配送', '门店自提（明日）']
@@ -188,6 +190,33 @@ export default {
           this.orderNote = String(content || '').trim()
         }
       })
+    },
+    requestWechatPayment(payment) {
+      return new Promise((resolve, reject) => {
+        uni.requestPayment({
+          provider: 'wxpay',
+          timeStamp: payment.timeStamp,
+          nonceStr: payment.nonceStr,
+          package: payment.package,
+          signType: payment.signType || 'RSA',
+          paySign: payment.paySign,
+          success: resolve,
+          fail: reject
+        })
+      })
+    },
+    goSuccess(result) {
+      if (this.fromCart) {
+        removeCartItems(this.orderItems.flatMap(item => [item.id, item.productId, item._id]))
+        clearCheckoutItems()
+      }
+      const orderId = result.id || result.orderNo
+      const payable = result.payable || result.amount || this.amount.payable
+      // 使用 storage 传递敏感数据，避免 URL 泄露
+      uni.setStorageSync('order_success_data', { orderId, payable, receiver: this.address.receiver, phone: this.address.phone, deliveryTime: this.checkoutText.deliveryTime })
+      setTimeout(() => {
+        uni.redirectTo({ url: '/pages/order/success/index' })
+      }, 800)
     },
     async pay() {
       if (!requireLogin('下单功能需要登录后使用')) return
@@ -221,21 +250,29 @@ export default {
           uni.showToast({ title: '下单失败', icon: 'none' })
           return
         }
+        if (result.payRequired && result.payment) {
+          uni.hideLoading()
+          await this.requestWechatPayment(result.payment)
+          uni.showLoading({ title: '确认支付中' })
+          const paidOrder = await syncPaymentStatus(result.id || result.orderNo)
+          uni.hideLoading()
+          if (!paidOrder || paidOrder.payStatus !== 'paid') {
+            uni.showToast({ title: '支付确认中，请稍后查看订单', icon: 'none' })
+            return
+          }
+          uni.showToast({ title: '支付成功', icon: 'success' })
+          this.goSuccess(paidOrder)
+          return
+        }
         uni.hideLoading()
         uni.showToast({ title: '下单成功', icon: 'success' })
-        if (this.fromCart) {
-          removeCartItems(this.orderItems.flatMap(item => [item.id, item.productId, item._id]))
-          clearCheckoutItems()
-        }
-        const orderId = result.id || result.orderNo
-        const payable = result.payable || result.amount || this.amount.payable
-        // 使用 storage 传递敏感数据，避免 URL 泄露
-        uni.setStorageSync('order_success_data', { orderId, payable, receiver: this.address.receiver, phone: this.address.phone, deliveryTime: this.checkoutText.deliveryTime })
-        setTimeout(() => {
-          uni.redirectTo({ url: '/pages/order/success/index' })
-        }, 800)
+        this.goSuccess(result)
       } catch (error) {
         uni.hideLoading()
+        if (String(error && error.errMsg || '').includes('cancel')) {
+          uni.showToast({ title: '支付已取消', icon: 'none' })
+          return
+        }
         showCloudError(error)
       }
     }

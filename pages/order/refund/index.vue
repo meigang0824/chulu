@@ -9,7 +9,7 @@
       <view class="submitted__desc">客服会在 24 小时内审核并联系您，请耐心等待。</view>
       <view class="submitted__info">
         <view>退款编号：<text>{{ refundNo }}</text></view>
-        <view>申请金额：<text class="submitted__amount">￥{{ form.refundAmount }}</text></view>
+        <view>申请金额：<text class="submitted__amount">￥{{ money(form.refundAmount) }}</text></view>
         <view>退款原因：<text>{{ reasonText }}</text></view>
       </view>
       <view class="submitted-actions">
@@ -24,7 +24,7 @@
       <view class="order-info card">
         <view class="order-info__head">
           <text>退款订单</text>
-          <view class="order-info__amount">￥{{ order.payable || order.amount }}</view>
+          <view class="order-info__amount">￥{{ money(order.payable || order.amount) }}</view>
         </view>
         <view class="order-info__detail">
           <text>订单编号：{{ order.detailId || order.id }}</text>
@@ -70,7 +70,7 @@
               :maxlength="10"
             />
           </view>
-          <text class="amount-tip">最高可退 ￥{{ order.payable || order.amount || 0 }}</text>
+          <text class="amount-tip">最高可退 ￥{{ money(order.payable || order.amount || 0) }}</text>
         </view>
 
         <view class="form-line">
@@ -115,6 +115,7 @@
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import { getBuyerOrderById, getShopConfig, submitRefundRequest } from '@/services/dataService'
 import { ensurePageAccess } from '@/utils/auth'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar },
@@ -160,6 +161,7 @@ export default {
     }
   },
   methods: {
+    money,
     validate() {
       if (!['delivering', 'completed'].includes(this.order.status)) {
         return this.order.status === 'cancelled' ? '已取消订单无需申请退款' : '当前订单还未配送，如需取消请直接取消订单'

@@ -71,7 +71,7 @@
           <view v-for="item in selectedItems" :key="item.id" class="selected-item">
             <image :src="item.image" mode="aspectFill" />
             <view class="selected-item__name">{{ item.name }}</view>
-            <view class="selected-item__meta">￥{{ item.groupPrice }} · {{ item.groupStock }}份</view>
+            <view class="selected-item__meta">￥{{ money(item.groupPrice) }} · {{ item.groupStock }}份</view>
             <view class="selected-item__remove" @tap="removeProduct(item.id)">移除</view>
           </view>
         </view>
@@ -102,7 +102,7 @@
             <view class="pool-item__name">{{ product.name }}</view>
             <view class="pool-item__desc">{{ product.desc || '新鲜烘焙商品' }}</view>
             <view class="pool-item__meta">
-              <text>￥{{ product.price }}</text>
+              <text>￥{{ money(product.price) }}</text>
               <text>库存 {{ product.stock || product.totalStock || 0 }}</text>
             </view>
           </view>
@@ -129,6 +129,7 @@ import AdminTabBar from '@/components/AdminTabBar/AdminTabBar.vue'
 import { getProducts, getCategories, saveGroup, getShopConfig, getActiveGroups } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
+import { money } from '@/utils/format'
 
 function pad2(value) {
   return String(value).padStart(2, '0')
@@ -195,7 +196,7 @@ export default {
       const amount = this.selectedItems.reduce((sum, item) => {
         return sum + Number(item.groupPrice || item.price || 0) * Number(item.groupStock || item.stock || 0)
       }, 0)
-      return amount.toFixed(amount % 1 === 0 ? 0 : 1)
+      return money(amount)
     },
     deadlineLabel() {
       const target = new Date(`${this.groupForm.deadlineDate}T${this.groupForm.deadlineTime}:00`)
@@ -213,6 +214,7 @@ export default {
     }
   },
   methods: {
+    money,
     normalizeSelected(product) {
       const stock = Number(product.stock || product.totalStock || 30)
       return {
