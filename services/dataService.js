@@ -6,15 +6,59 @@ import { productAPI, orderAPI, groupAPI, stockAPI, statsAPI, shopAPI, addressAPI
 import { refreshAuthState, getAuthSession } from '@/utils/auth'
 import { IMAGE_ASSETS, normalizeGroupImages, normalizeImageList, normalizeImageUrl, resolveImageList, resolveImageUrl } from '@/utils/image'
 import { getDefaultBannerConfig, normalizeBannerConfig } from '@/utils/bannerConfig'
+import { cachedRuntime, clearRuntimeCache } from '@/utils/runtimeCache'
 
 const STORAGE_KEYS = {
   identity: 'app_user_identity',
   portalMode: 'app_portal_mode'
 }
 
+const CACHE_TTL = {
+  products: 8000,
+  groups: 8000,
+  groupProducts: 8000,
+  banners: 30000,
+  home: 6000,
+  shop: 60000,
+  dashboard: 6000
+}
+
+function clearProductRuntimeCache() {
+  clearRuntimeCache('products:')
+  clearRuntimeCache('product:')
+  clearRuntimeCache('groupProducts:')
+  clearRuntimeCache('home:')
+  clearRuntimeCache('dashboard:')
+}
+
+function clearGroupRuntimeCache() {
+  clearRuntimeCache('groups:')
+  clearRuntimeCache('group:')
+  clearRuntimeCache('groupProducts:')
+  clearRuntimeCache('home:')
+  clearRuntimeCache('dashboard:')
+}
+
+function clearBannerRuntimeCache() {
+  clearRuntimeCache('banners:')
+  clearRuntimeCache('home:')
+}
+
+function clearOrderRuntimeCache() {
+  clearRuntimeCache('products:')
+  clearRuntimeCache('groupProducts:')
+  clearRuntimeCache('home:')
+  clearRuntimeCache('dashboard:')
+}
+
 function authToken() {
   const session = getAuthSession()
   return session && session.token ? session.token : ''
+}
+
+function authCacheScope() {
+  const token = authToken()
+  return token ? token.slice(0, 16) : 'guest'
 }
 
 function bySort(a, b) {
@@ -76,6 +120,32 @@ function isToday(value) {
     date.getDate() === nowDate.getDate()
 }
 
+function toDateOnly(date = new Date()) {
+  const value = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(value.getTime())) return ''
+  const y = value.getFullYear()
+  const m = `${value.getMonth() + 1}`.padStart(2, '0')
+  const d = `${value.getDate()}`.padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function parseDateBoundary(value = '', endOfDay = false) {
+  if (!value) return null
+  const date = new Date(`${String(value).slice(0, 10)}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function inDateRange(value, startDate = '', endDate = '') {
+  if (!startDate && !endDate) return true
+  const date = new Date(value || '')
+  if (Number.isNaN(date.getTime())) return false
+  const start = parseDateBoundary(startDate)
+  const end = parseDateBoundary(endDate, true)
+  if (start && date < start) return false
+  if (end && date > end) return false
+  return true
+}
+
 function statusMeta(status = '', deliveryStatus = '') {
   if (status === 'pendingPayment') return { status: 'pendingPayment', statusText: '待支付', payStatusText: '待支付' }
   if (status === 'completed' || deliveryStatus === 'completed') return { status: 'completed', statusText: '已完成', payStatusText: '已付款' }
@@ -114,7 +184,7 @@ function buildProgress(order) {
 function normalizeProduct(row = {}) {
   row = row || {}
   const rawLimit = Number(row.limit || 0)
-  const limit = rawLimit > 1 ? rawLimit : 5
+  const limit = rawLimit > 0 ? rawLimit : 0
   const imageFileID = normalizeImageUrl(row.imageFileID || row.image, IMAGE_ASSETS.product)
   const bannerImageFileID = normalizeImageUrl(row.bannerImageFileID || row.bannerImage || row.image, imageFileID)
   const galleryFileIDs = normalizeImageList(row.galleryFileIDs || row.gallery, bannerImageFileID)
@@ -134,6 +204,7 @@ function normalizeProduct(row = {}) {
     gallery: galleryFileIDs,
     galleryFileIDs,
     detail,
+    specs: Array.isArray(row.specs) ? row.specs : [],
     price: Number(row.price || 0),
     originPrice: Number(row.originPrice || 0),
     sold: Number(row.sold || 0),
@@ -193,6 +264,7 @@ function normalizeOrder(row = {}, productMap = {}) {
     refundReasonText: row.refundReasonText || '',
     avatar: row.avatar || '',
     avatarText: row.avatarText || '甜',
+    buyerId: row.buyerId || row.userId || '',
     items,
     cancelledAt: row.cancelledAt || '',
     progress: buildProgress({ ...row, status: meta.status, deliveryText }),
@@ -248,6 +320,7 @@ function normalizeBannerData(config = {}) {
 
 function extractGroupProducts(groups = []) {
   return (groups || []).flatMap(group => {
+    const groupId = group.id || group._id || group.docId || group.groupId || ''
     const products = Array.isArray(group.products) ? group.products : []
     return products.map((item, index) => ({
       ...item,
@@ -257,10 +330,111 @@ function extractGroupProducts(groups = []) {
       deadlineAt: item.deadlineAt || group.deadlineAt,
       deliveryTime: item.deliveryTime || group.deliveryTime,
       deliveryRange: item.deliveryRange || group.deliveryRange,
-      groupId: group.id,
+      groupId,
+      groupName: group.name || group.title || '',
       sort: Number(item.sort || index + 1)
     }))
   }).sort(bySort)
+}
+
+function mergeGroupProductsWithLiveProducts(groupProducts = [], liveProducts = []) {
+  const productMap = (liveProducts || []).reduce((map, product) => {
+    const id = product && (product.id || product._id || product.productId)
+    if (id) map[id] = product
+    return map
+  }, {})
+  return (groupProducts || []).map(item => {
+    const live = productMap[item.productId || item.id] || {}
+    return {
+      ...live,
+      ...item,
+      sold: Number(live.sold !== undefined ? live.sold : item.sold || 0),
+      stock: Number(live.stock !== undefined ? live.stock : item.stock || 0),
+      totalStock: Number(live.totalStock !== undefined ? live.totalStock : item.totalStock || item.stock || 0),
+      image: item.image || live.image,
+      imageFileID: item.imageFileID || live.imageFileID || live.image,
+      bannerImage: item.bannerImage || live.bannerImage,
+      bannerImageFileID: item.bannerImageFileID || live.bannerImageFileID || live.bannerImage
+    }
+  })
+}
+
+function productIdentity(item = {}) {
+  return String(item.productId || item.id || item._id || item.docId || '')
+}
+
+function productDeadlineTime(item = {}) {
+  const date = new Date(item.deadlineAt || '')
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime()
+}
+
+function shouldPreferProduct(next = {}, current = {}) {
+  const nextDeadline = productDeadlineTime(next)
+  const currentDeadline = productDeadlineTime(current)
+  if (nextDeadline && currentDeadline && nextDeadline !== currentDeadline) return nextDeadline < currentDeadline
+  if (nextDeadline && !currentDeadline) return true
+  if (!nextDeadline && currentDeadline) return false
+  return Number(next.sort || 0) < Number(current.sort || 0)
+}
+
+function dedupeProductsById(products = []) {
+  const map = {}
+  ;(products || []).forEach(item => {
+    const key = productIdentity(item)
+    if (!key) return
+    if (!map[key] || shouldPreferProduct(item, map[key])) map[key] = item
+  })
+  return Object.values(map).sort((a, b) => {
+    const deadlineDiff = productDeadlineTime(a) - productDeadlineTime(b)
+    if (deadlineDiff) return deadlineDiff
+    return bySort(a, b)
+  })
+}
+
+function buildGroupSections(groups = [], liveProducts = []) {
+  return (groups || []).map((group, index) => {
+    const id = group.id || group._id || group.docId || group.groupId || ''
+    const title = group.title || group.name || `团购 ${index + 1}`
+    const products = mergeGroupProductsWithLiveProducts(extractGroupProducts([group]), liveProducts)
+    return {
+      ...group,
+      id,
+      _id: group._id || id,
+      title,
+      name: group.name || title,
+      deadline: group.deadline || '',
+      deadlineAt: group.deadlineAt || '',
+      deliveryTime: group.deliveryTime || '',
+      deliveryRange: group.deliveryRange || '',
+      products,
+      productCount: products.length,
+      sort: Number(group.sort || index + 1)
+    }
+  }).filter(group => group.productCount > 0)
+    .sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0))
+}
+
+function groupParticipantCount(group = {}, orders = []) {
+  const groupId = String(group.id || group._id || group.docId || group.groupId || '')
+  const productIds = new Set((group.products || [])
+    .map(item => String(item.productId || item.id || item._id || ''))
+    .filter(Boolean))
+  const buyers = new Set()
+
+  ;(orders || []).forEach(order => {
+    if (!order || order.status === 'cancelled' || order.payStatus === 'pending') return
+    const items = Array.isArray(order.items) ? order.items : []
+    const matched = items.some(item => {
+      const itemGroupId = String(item.groupId || '')
+      const itemProductId = String(item.productId || item.id || item._id || '')
+      return (groupId && itemGroupId === groupId) || (itemProductId && productIds.has(itemProductId))
+    })
+    if (!matched) return
+    const buyerKey = order.buyerId || order._openid || order.fullPhone || order.phone || order.orderNo || order.id
+    if (buyerKey) buyers.add(String(buyerKey))
+  })
+
+  return buyers.size
 }
 
 async function hydrateProductImages(product) {
@@ -330,8 +504,10 @@ async function hydrateBannerConfigImages(config) {
 
 // ==================== 商品 ====================
 export async function getProducts() {
-  const rows = await productAPI.list({ status: 'active' })
-  return Promise.all((rows || []).filter(validRow).map(row => hydrateProductImages(normalizeProduct(row))))
+  return cachedRuntime('products:active', CACHE_TTL.products, async () => {
+    const rows = await productAPI.list({ status: 'active' })
+    return Promise.all((rows || []).filter(validRow).map(row => hydrateProductImages(normalizeProduct(row))))
+  })
 }
 
 export async function getAdminProducts() {
@@ -340,8 +516,10 @@ export async function getAdminProducts() {
 }
 
 export async function getProductById(id) {
-  const row = await productAPI.get(id)
-  return row ? hydrateProductImages(normalizeProduct(row)) : null
+  return cachedRuntime(`product:${id}`, CACHE_TTL.products, async () => {
+    const row = await productAPI.get(id)
+    return row ? hydrateProductImages(normalizeProduct(row)) : null
+  })
 }
 
 export async function getAdminProductById(id) {
@@ -368,6 +546,7 @@ export async function getCategories() {
 }
 
 export async function saveProduct(product) {
+  clearProductRuntimeCache()
   if (product.id) {
     return productAPI.update(product.id, product, authToken())
   }
@@ -375,77 +554,111 @@ export async function saveProduct(product) {
 }
 
 export async function saveGroup(group) {
+  clearGroupRuntimeCache()
+  if (group.id) return groupAPI.update(group.id, group, authToken())
   return groupAPI.create(group, authToken())
 }
 
 export async function getActiveGroups() {
-  const groups = await groupAPI.list({ status: 'active' })
-  return Promise.all((groups || []).filter(validRow).map(hydrateGroupImages))
+  return cachedRuntime('groups:active', CACHE_TTL.groups, async () => {
+    const groups = await groupAPI.list({ status: 'active' })
+    return Promise.all((groups || []).filter(validRow).map(hydrateGroupImages))
+  })
 }
 
-export async function getGroupProducts() {
-  const groups = await getActiveGroups()
-  return extractGroupProducts(groups)
+export async function getGroupById(id, admin = false) {
+  const loader = async () => {
+    const row = await groupAPI.get(id, admin ? authToken() : '')
+    return row ? hydrateGroupImages(row) : null
+  }
+  if (admin) return loader()
+  return cachedRuntime(`group:${id}`, CACHE_TTL.groups, loader)
+}
+
+export async function getGroupProducts(groupId = '') {
+  return cachedRuntime(`groupProducts:${groupId || 'all'}`, CACHE_TTL.groupProducts, async () => {
+    const [groups, liveProducts] = await Promise.all([
+      groupId
+        ? getGroupById(groupId).then(group => [group].filter(Boolean))
+        : getActiveGroups(),
+      getProducts().catch(() => [])
+    ])
+    return dedupeProductsById(mergeGroupProductsWithLiveProducts(extractGroupProducts(groups), liveProducts))
+  })
 }
 
 export async function updateProductStatus(productId, status) {
+  clearProductRuntimeCache()
   return productAPI.update(productId, { status }, authToken())
 }
 
 export async function deleteProduct(productId) {
+  clearProductRuntimeCache()
   return productAPI.delete(productId, authToken())
 }
 
 export async function getBannerConfigFromCloud() {
-  try {
-    return normalizeBannerData(await bannerAPI.getConfig())
-  } catch {
-    return normalizeBannerData(getDefaultBannerConfig())
-  }
+  return cachedRuntime('banners:config', CACHE_TTL.banners, async () => {
+    try {
+      return normalizeBannerData(await bannerAPI.getConfig())
+    } catch {
+      return normalizeBannerData(getDefaultBannerConfig())
+    }
+  })
 }
 
 export async function getDisplayBannerConfigFromCloud() {
-  return hydrateBannerConfigImages(await getBannerConfigFromCloud())
+  return cachedRuntime('banners:display', CACHE_TTL.banners, async () => hydrateBannerConfigImages(await getBannerConfigFromCloud()))
 }
 
 // ==================== 首页 ====================
 export async function getHomeData() {
-  try {
-    const [orders, bannerConfig, activeGroups] = await Promise.all([
-      orderAPI.list({}, authToken()).catch(() => []),
-      getBannerConfigFromCloud(),
-      getActiveGroups().catch(() => []),
-    ])
+  return cachedRuntime(`home:data:${authCacheScope()}`, CACHE_TTL.home, async () => {
+    try {
+      const [orders, bannerConfig, activeGroups, liveProducts] = await Promise.all([
+        orderAPI.list({}, authToken()).catch(() => []),
+        getBannerConfigFromCloud(),
+        getActiveGroups().catch(() => []),
+        getProducts().catch(() => [])
+      ])
 
-    const normalizedGroups = activeGroups || []
-    const displayProducts = extractGroupProducts(normalizedGroups)
-    const ordersList = await Promise.all((orders || []).filter(validRow).map(o => hydrateOrderImages(normalizeOrder(o))))
-    const displayBannerConfig = await hydrateBannerConfigImages(bannerConfig)
-    const currentGroup = normalizedGroups
-      .slice()
-      .sort((a, b) => new Date(a.deadlineAt || 0).getTime() - new Date(b.deadlineAt || 0).getTime())[0]
+      const normalizedGroups = activeGroups || []
+      const groupSections = buildGroupSections(normalizedGroups, liveProducts)
+      const ordersList = await Promise.all((orders || []).filter(validRow).map(o => hydrateOrderImages(normalizeOrder(o))))
+      const groupSectionsWithStats = groupSections.map(group => ({
+        ...group,
+        participantCount: groupParticipantCount(group, ordersList)
+      }))
+      const displayProducts = dedupeProductsById(groupSectionsWithStats.flatMap(group => group.products || []))
+      const displayBannerConfig = await hydrateBannerConfigImages(bannerConfig)
+      const currentGroup = groupSectionsWithStats[0]
 
-    return {
-      source: 'cloud',
-      bannerSettings: displayBannerConfig.settings,
-      banners: displayBannerConfig.banners,
-      activeProductCount: displayProducts.length,
-      products: displayProducts,
-      groupDeadline: currentGroup && currentGroup.deadline,
-      groupDeadlineAt: currentGroup && currentGroup.deadlineAt,
-      activities: buildActivities(ordersList, 6)
+      return {
+        source: 'cloud',
+        bannerSettings: displayBannerConfig.settings,
+        banners: displayBannerConfig.banners,
+        activeProductCount: displayProducts.length,
+        products: displayProducts,
+        groups: groupSectionsWithStats,
+        groupId: currentGroup && currentGroup.id,
+        groupTitle: currentGroup && (currentGroup.title || currentGroup.name),
+        groupDeadline: currentGroup && currentGroup.deadline,
+        groupDeadlineAt: currentGroup && currentGroup.deadlineAt,
+        activities: buildActivities(ordersList, 6)
+      }
+    } catch {
+      const displayBannerConfig = await hydrateBannerConfigImages(getDefaultBannerConfig())
+      return {
+        source: 'fallback',
+        bannerSettings: displayBannerConfig.settings,
+        banners: displayBannerConfig.banners,
+        activeProductCount: 0,
+        products: [],
+        groups: [],
+        activities: []
+      }
     }
-  } catch {
-    const displayBannerConfig = await hydrateBannerConfigImages(getDefaultBannerConfig())
-    return {
-      source: 'fallback',
-      bannerSettings: displayBannerConfig.settings,
-      banners: displayBannerConfig.banners,
-      activeProductCount: 0,
-      products: [],
-      activities: []
-    }
-  }
+  })
 }
 
 // ==================== 订单 ====================
@@ -453,11 +666,13 @@ export async function createOrder(payload) {
   const session = getAuthSession()
   const user = (session && session.user) || {}
   const buyerId = user.id || payload.buyerId || ''
-  return orderAPI.create({ ...payload, buyerId }, authToken())
+  const result = await orderAPI.create({ ...payload, buyerId }, authToken())
+  clearOrderRuntimeCache()
+  return result
 }
 
 export async function cancelBuyerOrder(orderId) {
-  return orderAPI.createRefund({
+  const result = await orderAPI.createRefund({
     orderId,
     type: 'cancelOrder',
     refundType: 'cancelOrder',
@@ -465,6 +680,8 @@ export async function cancelBuyerOrder(orderId) {
     reasonText: '申请取消订单',
     refundDesc: '用户申请取消订单，待店长同意后退款'
   }, authToken())
+  clearOrderRuntimeCache()
+  return result
 }
 
 export async function syncPaymentStatus(orderId) {
@@ -519,7 +736,9 @@ export async function getAdminOrderById(id) {
 }
 
 export async function updateOrderStatus(orderId, status) {
-  return orderAPI.updateStatus(orderId, status, authToken())
+  const result = await orderAPI.updateStatus(orderId, status, authToken())
+  clearOrderRuntimeCache()
+  return result
 }
 
 export async function getBuyerActivities(productId = '', limit = 6) {
@@ -568,11 +787,15 @@ export async function deleteAddress(id) {
 }
 
 export async function submitRefundRequest(payload) {
-  return orderAPI.createRefund(payload, authToken())
+  const result = await orderAPI.createRefund(payload, authToken())
+  clearOrderRuntimeCache()
+  return result
 }
 
 export async function handleRefundRequest(orderId, status, remark = '') {
-  return orderAPI.updateRefundStatus({ orderId, status, remark }, authToken())
+  const result = await orderAPI.updateRefundStatus({ orderId, status, remark }, authToken())
+  clearOrderRuntimeCache()
+  return result
 }
 
 // ==================== 店铺配置 ====================
@@ -605,6 +828,8 @@ const DEFAULT_SHOP_CONFIG = {
     serviceText: '新鲜现做，按单打包发货，感谢等待～',
     payText: '微信支付',
     deliveryFee: 0,
+    minimumOrderAmount: 88,
+    freeShippingAmount: 88,
     groupDiscount: 0
   },
   adminHero: { image: IMAGE_ASSETS.banner },
@@ -626,8 +851,19 @@ function normalizeShopConfig(config = {}) {
   }
   const logoFileID = normalizeImageUrl(merged.logoFileID || merged.logo, DEFAULT_SHOP_CONFIG.logo)
   const adminHeroImageFileID = normalizeImageUrl(merged.adminHero && (merged.adminHero.imageFileID || merged.adminHero.image), DEFAULT_SHOP_CONFIG.adminHero.image)
+  const rawMinimumOrderAmount = merged.checkout.minimumOrderAmount !== undefined && merged.checkout.minimumOrderAmount !== ''
+    ? merged.checkout.minimumOrderAmount
+    : merged.checkout.freeShippingAmount !== undefined && merged.checkout.freeShippingAmount !== ''
+      ? merged.checkout.freeShippingAmount
+      : DEFAULT_SHOP_CONFIG.checkout.minimumOrderAmount
+  const minimumOrderAmount = Number(rawMinimumOrderAmount || 0)
   return {
     ...merged,
+    checkout: {
+      ...merged.checkout,
+      minimumOrderAmount,
+      freeShippingAmount: Number(merged.checkout.freeShippingAmount || minimumOrderAmount)
+    },
     logo: logoFileID,
     logoFileID,
     adminHero: {
@@ -639,14 +875,19 @@ function normalizeShopConfig(config = {}) {
 }
 
 export async function getShopConfig() {
-  try {
-    return hydrateShopConfig(normalizeShopConfig(await shopAPI.get()))
-  } catch {
-    return hydrateShopConfig(normalizeShopConfig(DEFAULT_SHOP_CONFIG))
-  }
+  return cachedRuntime('shop:config', CACHE_TTL.shop, async () => {
+    try {
+      return hydrateShopConfig(normalizeShopConfig(await shopAPI.get()))
+    } catch {
+      return hydrateShopConfig(normalizeShopConfig(DEFAULT_SHOP_CONFIG))
+    }
+  })
 }
 
 export async function saveShopConfigToCloud(config) {
+  clearRuntimeCache('shop:')
+  clearRuntimeCache('categories:')
+  clearRuntimeCache('dashboard:')
   await shopAPI.update({
     ...config,
     logo: config.logoFileID || normalizeImageUrl(config.logo, DEFAULT_SHOP_CONFIG.logo),
@@ -664,30 +905,43 @@ export async function getAdminSubscriptionStatus() {
   return notificationAPI.getAdminSubscriptionStatus(session.token)
 }
 
-export async function requestAdminAfterSalesSubscribe() {
+export async function requestAdminAfterSalesSubscribe(statusOverride = null) {
   const session = getAuthSession()
   if (!session || !session.token) throw new Error('请先登录店长账号')
-  const status = await notificationAPI.getAdminSubscriptionStatus(session.token)
+  const status = statusOverride || await notificationAPI.getAdminSubscriptionStatus(session.token)
   const templates = [
     { type: 'order', templateId: status.orderTemplateId || '' },
     { type: 'afterSales', templateId: status.afterSalesTemplateId || status.templateId || '' }
   ].filter(item => item.templateId)
   if (!templates.length) throw new Error('请先在门店设置中配置下单或售后订阅模板ID')
-  if (typeof uni.requestSubscribeMessage !== 'function') {
+  const requestSubscribeMessage = typeof wx !== 'undefined' && typeof wx.requestSubscribeMessage === 'function'
+    ? wx.requestSubscribeMessage.bind(wx)
+    : typeof uni.requestSubscribeMessage === 'function'
+      ? uni.requestSubscribeMessage.bind(uni)
+      : null
+  if (!requestSubscribeMessage) {
     throw new Error('当前环境不支持订阅消息，请在微信小程序中操作')
   }
   const result = await new Promise((resolve, reject) => {
-    uni.requestSubscribeMessage({
+    requestSubscribeMessage({
       tmplIds: templates.map(item => item.templateId),
       success: resolve,
-      fail: reject
+      fail: err => {
+        const message = err && err.errMsg
+          ? `微信订阅授权失败：${err.errMsg}`
+          : '微信订阅授权失败，请确认模板ID属于当前小程序'
+        reject(new Error(message))
+      }
     })
   })
   const subscriptions = templates.map(item => ({
     ...item,
     accepted: result && result[item.templateId] === 'accept'
   }))
-  if (!subscriptions.some(item => item.accepted)) throw new Error('未授权消息提醒，暂时无法发送微信服务通知')
+  if (!subscriptions.some(item => item.accepted)) {
+    const rejected = subscriptions.some(item => result && result[item.templateId] === 'reject')
+    throw new Error(rejected ? '你没有勾选允许通知，暂时无法发送微信服务通知' : '未授权消息提醒，暂时无法发送微信服务通知')
+  }
   return notificationAPI.saveAdminSubscription({ subscriptions }, session.token)
 }
 
@@ -713,6 +967,7 @@ export async function getShopAboutData() {
 
 // ==================== 团购 ====================
 export async function saveBannerConfigToCloud(config) {
+  clearBannerRuntimeCache()
   const normalized = normalizeBannerData(config)
   const saved = await bannerAPI.updateConfig(normalized, authToken())
   return normalizeBannerData(saved || normalized)
@@ -775,61 +1030,87 @@ export async function getStockData() {
 }
 
 export async function updateStockItem(productId, patch) {
-  return stockAPI.update(productId, patch, authToken())
+  const result = await stockAPI.update(productId, patch, authToken())
+  clearRuntimeCache('dashboard:')
+  return result
 }
 
 // ==================== 管理面板 ====================
 export async function getAdminDashboardData() {
-  const [orders, stockData, activeGroups] = await Promise.all([
-    getAdminOrders('all'),
-    getStockData(),
-    getActiveGroups().catch(() => [])
-  ])
+  return cachedRuntime(`dashboard:data:${authCacheScope()}`, CACHE_TTL.dashboard, async () => {
+    const [orders, stockData, activeGroups, liveProducts] = await Promise.all([
+      getAdminOrders('all'),
+      getStockData(),
+      getActiveGroups().catch(() => []),
+      getProducts().catch(() => [])
+    ])
 
-  const todayOrders = orders.filter(item => isToday(item.createdAt || item.createDateTime || item.createTime))
-  const todaySales = todayOrders.reduce((sum, item) => sum + Number(item.payable || 0), 0)
-  const groupProducts = extractGroupProducts(activeGroups)
-  const refundOrders = orders.filter(item => item.refundStatus === 'pending')
-  const cancelledOrders = orders.filter(item => item.status === 'cancelled')
-  const afterSalesCount = refundOrders.length
+    const todayOrders = orders.filter(item => isToday(item.createdAt || item.createDateTime || item.createTime))
+    const todaySales = todayOrders.reduce((sum, item) => sum + Number(item.payable || 0), 0)
+    const groupSections = buildGroupSections(activeGroups || [], liveProducts)
+    const groupProducts = dedupeProductsById(mergeGroupProductsWithLiveProducts(extractGroupProducts(activeGroups), liveProducts))
+    const refundOrders = orders.filter(item => item.refundStatus === 'pending')
+    const cancelledOrders = orders.filter(item => item.status === 'cancelled')
+    const afterSalesCount = refundOrders.length
 
-  return {
-    orders,
-    refundOrders,
-    cancelledOrders,
-    products: groupProducts,
-    dashboardStats: [
-      { key: 'orders', label: '今日订单', value: todayOrders.length, unit: '单', trend: '', trendType: 'up', icon: 'receipt', theme: 'red' },
-      { key: 'sales', label: '今日销售额', value: todaySales.toFixed(2), unit: '元', trend: '', trendType: 'up', icon: 'yuan', theme: 'orange' },
-      { key: 'delivery', label: '待发货', value: orders.filter(item => item.status === 'pendingDelivery' || item.status === 'paid').length, unit: '单', trend: '', trendType: 'up', icon: 'truck', theme: 'blue' },
-      { key: 'afterSales', label: '售后/取消', value: afterSalesCount, unit: '单', trend: '', trendType: 'up', icon: 'receipt', theme: 'orange' }
-    ],
-    stockSummary: stockData.stockSummary
-  }
+    return {
+      orders,
+      refundOrders,
+      cancelledOrders,
+      products: groupProducts,
+      groups: groupSections,
+      dashboardStats: [
+        { key: 'orders', label: '今日订单', value: todayOrders.length, unit: '单', trend: '', trendType: 'up', icon: 'receipt', theme: 'red' },
+        { key: 'sales', label: '今日销售额', value: todaySales.toFixed(2), unit: '元', trend: '', trendType: 'up', icon: 'yuan', theme: 'orange' },
+        { key: 'delivery', label: '待发货', value: orders.filter(item => item.status === 'pendingDelivery' || item.status === 'paid').length, unit: '单', trend: '', trendType: 'up', icon: 'truck', theme: 'blue' },
+        { key: 'afterSales', label: '售后/取消', value: afterSalesCount, unit: '单', trend: '', trendType: 'up', icon: 'receipt', theme: 'orange' }
+      ],
+      stockSummary: stockData.stockSummary
+    }
+  })
 }
 
-export async function getAdminStatsData() {
+export async function getAdminStatsData(params = {}) {
   const [orders, products] = await Promise.all([getAdminOrders('all'), getAdminProducts()])
-  const totalSales = orders.reduce((sum, item) => sum + Number(item.payable || item.amount || 0), 0)
-  const completedSales = orders
+  const startDate = params.startDate || ''
+  const endDate = params.endDate || ''
+  const rangeOrders = orders.filter(item => inDateRange(item.createdAt || item.createDateTime || item.createTime, startDate, endDate))
+  const payableOrders = rangeOrders.filter(item => item.payStatus === 'paid' && item.status !== 'cancelled')
+  const totalSales = payableOrders.reduce((sum, item) => sum + Number(item.payable || item.amount || 0), 0)
+  const completedSales = payableOrders
     .filter(item => item.status === 'completed')
     .reduce((sum, item) => sum + Number(item.payable || item.amount || 0), 0)
   const activeProducts = products.filter(item => item.status === 'active').length
+  const rangeSoldMap = rangeOrders.reduce((map, order) => {
+    if (order.status === 'cancelled') return map
+    ;(order.items || []).forEach(item => {
+      if (!item.productId) return
+      map[item.productId] = (map[item.productId] || 0) + Number(item.count || 1)
+    })
+    return map
+  }, {})
   const topProducts = [...products]
+    .map(item => ({ ...item, sold: Number(rangeSoldMap[item.id] || 0), totalSold: Number(item.sold || 0) }))
+    .filter(item => Number(item.sold || 0) > 0)
     .sort((a, b) => Number(b.sold || 0) - Number(a.sold || 0))
     .slice(0, 5)
   return {
+    range: {
+      startDate,
+      endDate,
+      generatedAt: dateTimeText(new Date())
+    },
     overview: [
-      { key: 'sales', label: '累计销售额', value: totalSales.toFixed(2), unit: '元' },
-      { key: 'orders', label: '订单总数', value: orders.length, unit: '单' },
+      { key: 'sales', label: '销售额', value: totalSales.toFixed(2), unit: '元' },
+      { key: 'orders', label: '订单数', value: rangeOrders.length, unit: '单' },
       { key: 'completed', label: '已完成销售额', value: completedSales.toFixed(2), unit: '元' },
       { key: 'products', label: '上架商品数', value: activeProducts, unit: '个' }
     ],
     statusStats: [
-      { key: 'paid', label: '待发货', value: orders.filter(item => ['paid', 'pendingDelivery'].includes(item.status)).length },
-      { key: 'delivering', label: '已发货', value: orders.filter(item => item.status === 'delivering').length },
-      { key: 'completed', label: '已完成', value: orders.filter(item => item.status === 'completed').length },
-      { key: 'cancelled', label: '已取消', value: orders.filter(item => item.status === 'cancelled').length }
+      { key: 'paid', label: '待发货', value: rangeOrders.filter(item => ['paid', 'pendingDelivery'].includes(item.status)).length },
+      { key: 'delivering', label: '已发货', value: rangeOrders.filter(item => item.status === 'delivering').length },
+      { key: 'completed', label: '已完成', value: rangeOrders.filter(item => item.status === 'completed').length },
+      { key: 'cancelled', label: '已取消', value: rangeOrders.filter(item => item.status === 'cancelled').length }
     ],
     topProducts
   }

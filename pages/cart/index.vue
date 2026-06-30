@@ -18,7 +18,7 @@
             <view class="cart-item__name">{{ item.name }}</view>
             <view class="cart-item__meta">
               <text>已选 {{ item.count || 1 }} 份</text>
-              <text>单次最多 {{ itemMax(item) }} 份</text>
+              <text>{{ itemLimitText(item) }}</text>
             </view>
             <view class="cart-item__bottom">
               <view class="cart-item__price">￥{{ money(item.price) }}</view>
@@ -45,8 +45,9 @@
         <view class="cart-bottom__meta">
           <view>共 {{ totalCount }} 件</view>
           <text>合计：￥{{ totalAmount }}</text>
+          <view v-if="checkoutTip" class="cart-bottom__tip">{{ checkoutTip }}</view>
         </view>
-        <button @tap="checkout">去结算</button>
+        <button :class="{ 'is-disabled': !canCheckout }" @tap="checkout">去结算</button>
       </view>
     </template>
     <BuyerTabBar active="cart" :badge-count="totalCount" />
@@ -59,7 +60,7 @@ import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import BuyerTabBar from '@/components/BuyerTabBar/BuyerTabBar.vue'
 import { getCartItems, removeCartItems, saveCartItems, setCheckoutItems, updateCartItemCount } from '@/utils/shopState'
 import { requireLogin } from '@/utils/auth'
-import { getProductById } from '@/services/dataService'
+import { getProductById, getShopConfig } from '@/services/dataService'
 import { IMAGE_ASSETS, resolveImageUrl } from '@/utils/image'
 import { money } from '@/utils/format'
 
@@ -67,23 +68,49 @@ export default {
   components: { CustomNavBar, EmptyState, BuyerTabBar },
   data() {
     return {
-      items: []
+      items: [],
+      checkoutConfig: {}
     }
   },
   onShow() {
     this.loadCart()
+    this.loadCheckoutConfig()
   },
   computed: {
     totalCount() {
       return this.items.reduce((sum, item) => sum + Number(item.count || 0), 0)
     },
     totalAmount() {
-      const total = this.items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.count || 0), 0)
-      return money(total)
+      return money(this.productAmount)
+    },
+    productAmount() {
+      return this.items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.count || 0), 0)
+    },
+    minimumOrderAmount() {
+      return Number(this.checkoutConfig.minimumOrderAmount || this.checkoutConfig.freeShippingAmount || 0)
+    },
+    amountMissing() {
+      return Math.max(0, this.minimumOrderAmount - this.productAmount)
+    },
+    canCheckout() {
+      return !this.minimumOrderAmount || this.productAmount >= this.minimumOrderAmount
+    },
+    checkoutTip() {
+      if (!this.minimumOrderAmount) return ''
+      if (this.canCheckout) return `已满 ￥${money(this.minimumOrderAmount)}，可下单发货`
+      return `满 ￥${money(this.minimumOrderAmount)} 起下单，还差 ￥${money(this.amountMissing)}`
     }
   },
   methods: {
     money,
+    async loadCheckoutConfig() {
+      try {
+        const config = await getShopConfig()
+        this.checkoutConfig = config.checkout || {}
+      } catch {
+        this.checkoutConfig = {}
+      }
+    },
     async loadCart() {
       const items = getCartItems()
       this.items = items
@@ -115,7 +142,11 @@ export default {
     },
     itemMax(item) {
       const limit = Number(item.limit || 0)
-      return limit > 1 ? limit : 99
+      return limit > 0 ? limit : 99
+    },
+    itemLimitText(item) {
+      const limit = Number(item.limit || 0)
+      return limit > 0 ? `单次最多 ${limit} 份` : '不限购'
     },
     updateCount(item, count) {
       updateCartItemCount(item.id, count)
@@ -141,6 +172,10 @@ export default {
     },
     checkout() {
       if (!requireLogin('结算前请先登录')) return
+      if (!this.canCheckout) {
+        uni.showToast({ title: `满￥${money(this.minimumOrderAmount)}起下单`, icon: 'none' })
+        return
+      }
       setCheckoutItems(this.items)
       uni.navigateTo({ url: '/pages/order/confirm/index?from=cart' })
     },
@@ -200,5 +235,7 @@ export default {
 .cart-bottom { position: fixed; left: 0; right: 0; bottom: calc(142rpx + env(safe-area-inset-bottom)); z-index: 20; display: flex; align-items: center; gap: 22rpx; padding: 18rpx 24rpx; background: rgba(255, 253, 249, 0.98); border-top: 1rpx solid $color-border-light; box-shadow: $shadow-bottom; }
 .cart-bottom__meta { flex: 1; min-width: 0; color: $color-text-regular; font-size: 24rpx; }
 .cart-bottom__meta text { display: block; margin-top: 4rpx; color: $color-primary; font-size: 34rpx; font-weight: 900; }
+.cart-bottom__tip { margin-top: 4rpx; color: $color-text-regular; font-size: 22rpx; line-height: 1.25; }
 .cart-bottom button { @include flex-center; width: 220rpx; height: 88rpx; margin: 0; color: #fff; background: $gradient-primary; border: none; border-radius: $radius-pill; box-shadow: $shadow-btn; font-size: 30rpx; font-weight: 800; }
+.cart-bottom button.is-disabled { background: $color-text-light; box-shadow: none; }
 </style>

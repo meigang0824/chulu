@@ -62,6 +62,13 @@ export default {
       this.cartCount = getCartCount()
     },
     go(item) {
+      if (item.key === 'category') {
+        uni.removeStorageSync('buyer_selected_group_id')
+        if (item.key === this.active) {
+          uni.$emit('buyer:category-clear-group')
+          return
+        }
+      }
       if (item.key === this.active) return
       uni.switchTab({ url: item.url })
     }

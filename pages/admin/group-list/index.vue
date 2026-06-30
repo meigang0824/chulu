@@ -40,18 +40,19 @@
           <text>{{ formatTime(group.createdAt) }}</text>
         </view>
         <view class="group-card__products">
-          <view v-for="p in (group.products || []).slice(0, 4)" :key="p.id" class="product-mini">
+          <view v-for="p in (group.products || []).slice(0, 3)" :key="p.id" class="product-mini">
             <image :src="p.image || productFallback" mode="aspectFill" />
             <text>{{ p.name }}</text>
           </view>
-          <view v-if="(group.products || []).length > 4" class="product-more">
-            +{{ (group.products || []).length - 4 }}
+          <view v-if="(group.products || []).length > 3" class="product-more">
+            还有 {{ (group.products || []).length - 3 }} 款商品
           </view>
         </view>
         <view class="group-card__actions">
-          <button class="ghost-btn" @tap="viewGroup(group)">查看详情</button>
-          <button v-if="group.status === 'active'" class="ghost-btn danger" @tap="endGroup(group)">结束团购</button>
-          <button class="ghost-btn" @tap="deleteGroup(group)">删除</button>
+          <button class="ghost-btn" @tap="viewGroup(group)">详情</button>
+          <button class="ghost-btn ghost-btn--edit" @tap="editGroup(group)">编辑</button>
+          <button v-if="group.status === 'active'" class="ghost-btn danger" @tap="endGroup(group)">结束</button>
+          <button class="ghost-btn ghost-btn--muted" @tap="deleteGroup(group)">删除</button>
         </view>
       </view>
     </view>
@@ -132,6 +133,9 @@ export default {
     },
     viewGroup(group) {
       uni.navigateTo({ url: `/pages/admin/group-detail/index?id=${group.id}` })
+    },
+    editGroup(group) {
+      uni.navigateTo({ url: `/pages/admin/create-group/index?id=${group.id}` })
     },
     endGroup(group) {
       uni.showModal({
@@ -222,65 +226,119 @@ export default {
 }
 
 .group-list__content { padding: 0 24rpx; }
-.group-card { margin-top: 20rpx; padding: 24rpx; }
+.group-card { margin-top: 20rpx; padding: 26rpx; }
 .group-card__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 18rpx;
 }
 .group-card__title {
+  flex: 1;
+  min-width: 0;
   font-size: 30rpx;
-  font-weight: 700;
+  font-weight: 800;
   color: $color-text-main;
+  line-height: 1.35;
+  @include text-ellipsis;
 }
 .group-card__meta {
   display: flex;
-  gap: 24rpx;
+  flex-wrap: wrap;
+  gap: 8rpx 18rpx;
   margin-top: 12rpx;
   font-size: 22rpx;
   color: $color-text-light;
 }
 .group-card__products {
   display: flex;
+  flex-direction: column;
   gap: 12rpx;
-  margin-top: 16rpx;
+  margin-top: 18rpx;
+  padding: 14rpx;
+  background: $color-bg-light;
+  border: 1rpx solid $color-border-light;
+  border-radius: 18rpx;
 }
 .product-mini {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  width: 80rpx;
+  gap: 14rpx;
+  width: 100%;
+  min-width: 0;
 }
 .product-mini image {
-  width: 80rpx;
-  height: 80rpx;
-  border-radius: 18rpx;
+  flex-shrink: 0;
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: 14rpx;
+  background: $color-bg-deep;
 }
 .product-mini text {
-  font-size: 20rpx;
-  color: $color-text-light;
+  flex: 1;
+  min-width: 0;
+  color: $color-text-main;
+  font-size: 24rpx;
+  line-height: 1.35;
+  font-weight: 700;
   @include text-ellipsis;
 }
 .product-more {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 80rpx;
-  height: 80rpx;
-  background: $color-bg-light;
-  border-radius: 18rpx;
+  justify-content: flex-start;
+  height: 48rpx;
+  padding: 0 14rpx;
+  background: #fff;
+  border: 1rpx dashed $color-border;
+  border-radius: $radius-pill;
   font-size: 22rpx;
   color: $color-text-regular;
 }
 .group-card__actions {
   display: flex;
-  gap: 16rpx;
-  margin-top: 20rpx;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 22rpx;
 }
 .group-card__actions button {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 68rpx;
+  margin: 0;
+  padding: 0;
+  border-radius: $radius-pill;
+  font-size: 26rpx;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  text-align: center;
 }
-.ghost-btn.danger { color: $color-danger; border-color: $color-danger; }
+.group-card__actions button::after {
+  border: 0;
+}
+.group-card__actions .ghost-btn {
+  color: $color-text-main;
+  background: #fff;
+  border: 1rpx solid $color-border;
+}
+.group-card__actions .ghost-btn--edit {
+  color: $color-primary;
+  background: $color-primary-light;
+  border-color: rgba(255, 92, 114, 0.22);
+}
+.group-card__actions .ghost-btn.danger {
+  color: $color-danger;
+  background: #fff7f7;
+  border-color: rgba(232, 79, 95, 0.34);
+}
+.group-card__actions .ghost-btn--muted {
+  color: $color-text-regular;
+}
 
 .bottom-action {
   position: fixed;
@@ -292,12 +350,22 @@ export default {
   box-shadow: $shadow-bottom;
 }
 .bottom-action button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: 88rpx;
+  margin: 0;
+  padding: 0;
   color: #fff;
   background: $color-primary;
   border-radius: $radius-md;
   font-size: 30rpx;
   font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+.bottom-action button::after {
+  border: 0;
 }
 </style>

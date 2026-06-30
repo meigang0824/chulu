@@ -39,7 +39,7 @@
           <view class="price-row__main">
             <text class="price">￥{{ money(product.price) }}</text>
             <text v-if="product.originPrice" class="origin">￥{{ money(product.originPrice) }}</text>
-            <view class="limit">单次最多 {{ stepperMax }} 份</view>
+            <view class="limit">{{ limitText }}</view>
           </view>
           <view class="detail-stepper">
             <view
@@ -54,6 +54,11 @@
               @tap.stop="increaseCount"
             >+</view>
           </view>
+        </view>
+
+        <view v-if="specText" class="spec-line">
+          <text>规格</text>
+          <view>{{ specText }}</view>
         </view>
 
         <view class="stats">
@@ -112,7 +117,10 @@
     </template>
 
     <view class="bottom-bar">
-      <button class="share" open-type="share">⇧<text>分享</text></button>
+      <button class="share" open-type="share">
+        <AppIcon name="wechat" :size="34" color="#18BF61" />
+        <text>分享</text>
+      </button>
       <button class="cart-action" @tap="addToCart">加入购物车</button>
       <button class="join" :class="{ 'join--disabled': pageLoading || product.stock <= 0 }" :disabled="pageLoading || product.stock <= 0" @tap="goConfirm">
         <block v-if="pageLoading">加载中...</block>
@@ -126,14 +134,16 @@
 <script>
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
+import AppIcon from '@/components/AppIcon/AppIcon.vue'
 import { getBuyerActivities, getProductById } from '@/services/dataService'
 import { subscribeOrderReminder } from '@/utils/subscribeMessage'
 import { requireLogin } from '@/utils/auth'
 import { addCartItem, getCartItemCount, isFavorite, setFavorite } from '@/utils/shopState'
+import { cloudImageHttpsUrl, IMAGE_ASSETS } from '@/utils/image'
 import { money } from '@/utils/format'
 
 export default {
-  components: { CustomNavBar, SkeletonBlock },
+  components: { CustomNavBar, SkeletonBlock, AppIcon },
   data() {
     return {
       product: {},
@@ -155,7 +165,27 @@ export default {
     stepperMax() {
       if (Number(this.product && this.product.stock) <= 0) return 0
       const limit = Number(this.product && this.product.limit)
-      return limit > 1 ? limit : 99
+      return limit > 0 ? limit : 99
+    },
+    limitText() {
+      const limit = Number(this.product && this.product.limit)
+      return limit > 0 ? `单次最多 ${limit} 份` : '不限购'
+    },
+    specText() {
+      const product = this.product || {}
+      if (product.spec || product.specification) return String(product.spec || product.specification).trim()
+      const specs = product.specs
+      if (!Array.isArray(specs) || !specs.length) return ''
+      return specs
+        .map(item => {
+          if (!item) return ''
+          if (typeof item === 'string') return item
+          const name = String(item.name || '').trim()
+          const value = String(item.value || item.text || '').trim()
+          return value || name
+        })
+        .filter(Boolean)
+        .join(' / ')
     },
     groupPercent() {
       const target = this.product.groupTarget || 0
@@ -194,20 +224,33 @@ export default {
   onShareAppMessage() {
     return {
       title: this.product.name || '初炉新鲜烘焙',
-      path: `/pages/product/detail?id=${this.productId || ''}`
+      path: `/pages/product/detail?id=${this.productId || ''}`,
+      imageUrl: this.shareCoverImage()
     }
   },
   methods: {
     money,
+    shareCoverImage() {
+      const image = this.product.bannerImage || this.product.image || this.product.imageFileID || this.product.bannerImageFileID || ''
+      if (String(image).startsWith('cloud://')) return cloudImageHttpsUrl(image) || image
+      return image || cloudImageHttpsUrl(IMAGE_ASSETS.banner)
+    },
     async loadProduct(id) {
       try {
         const product = await getProductById(id)
+        const context = uni.getStorageSync(`buyer_product_context_${id}`) || {}
         if (!product) {
           uni.showToast({ title: '商品不存在', icon: 'none' })
           setTimeout(() => uni.navigateBack(), 600)
           return
         }
-        this.product = product
+        this.product = {
+          ...product,
+          ...context,
+          id: product.id || context.id,
+          _id: product._id || context._id,
+          productId: product.productId || context.productId || product.id
+        }
       } catch (error) {
         console.error('获取商品失败:', error)
         uni.showToast({ title: '网络异常，请检查连接', icon: 'none' })
@@ -353,6 +396,21 @@ export default {
   text-align: center;
 }
 
+.spec-line {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin-top: 22rpx;
+  padding: 18rpx 20rpx;
+  color: $color-text-regular;
+  background: $color-bg-light;
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-md;
+  font-size: 26rpx;
+}
+.spec-line text { flex-shrink: 0; color: $color-text-light; }
+.spec-line view { flex: 1; min-width: 0; color: $color-text-main; font-weight: $font-weight-semibold; @include text-ellipsis; }
+
 .stats { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 24rpx; }
 .stats view {
   flex: 1; min-width: 190rpx; @include flex-center; height: 64rpx;
@@ -400,11 +458,21 @@ export default {
   border-top: 1rpx solid $color-border-light; box-shadow: $shadow-bottom;
 }
 .share {
-  @include flex-center; flex-direction: column; width: 150rpx; height: 88rpx;
-  color: $color-text-main; background: #fff; border: 1rpx solid $color-border;
-  border-radius: $radius-pill; font-size: 28rpx;
+  @include flex-center;
+  flex-direction: column;
+  width: 150rpx;
+  height: 88rpx;
+  margin: 0;
+  padding: 0;
+  color: #18BF61;
+  background: #fff;
+  border: 1rpx solid rgba(24, 191, 97, 0.35);
+  border-radius: $radius-pill;
+  font-size: 28rpx;
+  font-weight: 800;
 }
-.share text { margin-top: 2rpx; font-size: 22rpx; }
+.share::after { border: 0; }
+.share text { margin-top: 2rpx; font-size: 22rpx; line-height: 1; }
 .cart-action {
   @include flex-center;
   flex: 0 0 190rpx;

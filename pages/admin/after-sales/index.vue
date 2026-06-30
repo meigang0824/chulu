@@ -62,7 +62,6 @@
       </view>
     </view>
 
-    <AdminTabBar active="dashboard" />
   </view>
 </template>
 
@@ -71,14 +70,13 @@ import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
 import StatusTag from '@/components/StatusTag/StatusTag.vue'
-import AdminTabBar from '@/components/AdminTabBar/AdminTabBar.vue'
 import { getAdminOrders, handleRefundRequest } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
 import { money } from '@/utils/format'
 
 export default {
-  components: { CustomNavBar, EmptyState, SkeletonBlock, StatusTag, AdminTabBar },
+  components: { CustomNavBar, EmptyState, SkeletonBlock, StatusTag },
   data() {
     return {
       active: 'pending',
@@ -198,7 +196,7 @@ export default {
 <style lang="scss" scoped>
 @import '@/common/theme.scss';
 
-.after-sales { padding-bottom: 190rpx; }
+.after-sales { padding-bottom: 80rpx; }
 .tabs { display:flex; gap:14rpx; margin-top:18rpx; padding:16rpx; }
 .tab { @include flex-center; flex:1; height:64rpx; color:$color-text-regular; background:#fff; border:1rpx solid $color-border-light; border-radius:$radius-pill; font-size:26rpx; }
 .tab text { margin-left:8rpx; color:$color-text-light; font-size:22rpx; }

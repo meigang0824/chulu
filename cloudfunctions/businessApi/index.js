@@ -24,6 +24,8 @@ const WECHAT_PAY_CONFIG = {
 const ADMIN_ROLES = ['owner', 'manager', 'staff']
 const DEFAULT_USER_ROLE = 'buyer'
 const SESSION_DAYS = 7
+let cachedWechatAccessToken = null
+let cachedWechatAccessTokenExpiresAt = 0
 
 function now() { return new Date().toISOString() }
 function isAdmin(r) { return ADMIN_ROLES.includes(r) }
@@ -35,6 +37,17 @@ function businessError(code, message) {
   const error = new Error(message)
   error.code = code
   return error
+}
+
+function parseTime(value) {
+  if (!value) return 0
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? 0 : time
+}
+
+function isExpiredDeadline(value, nowTime = Date.now()) {
+  const time = parseTime(value)
+  return !!time && time <= nowTime
 }
 
 function normalizePrivateKey(value = '') {
@@ -96,6 +109,46 @@ async function requestWechatPay(method, urlPath, body = null) {
     throw businessError('WECHAT_PAY_API_ERROR', message)
   }
   return data
+}
+
+async function getWechatAccessToken() {
+  if (cachedWechatAccessToken && Date.now() < cachedWechatAccessTokenExpiresAt) return cachedWechatAccessToken
+  if (!WECHAT_CONFIG.appid || !WECHAT_CONFIG.secret) throw new Error('WECHAT_SECRET未配置，无法获取微信access_token')
+  const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${WECHAT_CONFIG.appid}&secret=${WECHAT_CONFIG.secret}`
+  const response = await fetch(url)
+  const data = await response.json()
+  if (!response.ok || !data.access_token) {
+    throw new Error(data.errmsg || `获取微信access_token失败(${response.status})`)
+  }
+  cachedWechatAccessToken = data.access_token
+  cachedWechatAccessTokenExpiresAt = Date.now() + Math.max(60, Number(data.expires_in || 7200) - 300) * 1000
+  return cachedWechatAccessToken
+}
+
+async function sendSubscribeMessage(params) {
+  try {
+    return await cloud.openapi.subscribeMessage.send(params)
+  } catch (error) {
+    const errMsg = String(error && (error.errMsg || error.message) || '')
+    if (!/access_token|INVALID_WX_ACCESS_TOKEN|invalid wx openapi access_token/i.test(errMsg)) throw error
+    const accessToken = await getWechatAccessToken()
+    const response = await fetch(`https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${accessToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        touser: params.touser,
+        template_id: params.templateId,
+        page: params.page,
+        data: params.data,
+        miniprogram_state: 'formal'
+      })
+    })
+    const result = await response.json()
+    if (!response.ok || result.errcode) {
+      throw new Error(result.errmsg || `订阅消息发送失败(${response.status})`)
+    }
+    return result
+  }
 }
 
 function buildPaymentParams(prepayId) {
@@ -393,6 +446,92 @@ async function promoteAllUsersToManager(authToken) {
   }
 }
 
+function publicAccount(account = {}, currentAccountId = '') {
+  return {
+    id: account.id || account._id || '',
+    username: account.username || '',
+    phone: account.phone || '',
+    role: account.role || 'buyer',
+    displayName: account.displayName || account.username || '初炉用户',
+    avatar: account.avatar || '',
+    avatarText: account.avatarText || (account.displayName || account.username || '用').slice(0, 2),
+    status: account.status || 'active',
+    openidBound: !!account.openid,
+    isSelf: !!currentAccountId && account.id === currentAccountId,
+    createdAt: account.createdAt || '',
+    updatedAt: account.updatedAt || '',
+    lastLoginAt: account.lastLoginAt || ''
+  }
+}
+
+async function listAccounts(authToken) {
+  const auth = await getAccountByToken(authToken)
+  if (!auth || !isAdmin(auth.account.role)) {
+    return { ok: false, code: 'PERMISSION_DENIED', message: '需要店长权限' }
+  }
+  const { data } = await db.collection('accounts').limit(1000).get()
+  const roleWeight = role => role === 'owner' ? 0 : role === 'manager' ? 1 : role === 'staff' ? 2 : role === 'buyer' ? 3 : 4
+  const accounts = (data || [])
+    .filter(account => account && !isPlaceholderDoc(account))
+    .map(account => publicAccount(account, auth.account.id))
+    .sort((a, b) => {
+      if (roleWeight(a.role) !== roleWeight(b.role)) return roleWeight(a.role) - roleWeight(b.role)
+      return String(b.lastLoginAt || b.updatedAt || b.createdAt || '').localeCompare(String(a.lastLoginAt || a.updatedAt || a.createdAt || ''))
+    })
+  return { ok: true, data: accounts }
+}
+
+async function syncAdminUserForAccount(account = {}, role = 'buyer') {
+  if (!account.openid) return
+  const timestamp = now()
+  const { data } = await db.collection('admin_users').where({ openid: account.openid }).limit(1).get()
+  if (isAdmin(role)) {
+    const payload = {
+      openid: account.openid,
+      role,
+      name: account.displayName || account.username || '店长',
+      status: 'active',
+      accountId: account.id || '',
+      updatedAt: timestamp
+    }
+    if (data && data.length) {
+      await db.collection('admin_users').doc(data[0]._id).update({ data: payload })
+    } else {
+      await db.collection('admin_users').add({ data: { ...payload, createdAt: timestamp } })
+    }
+  } else if (data && data.length) {
+    await db.collection('admin_users').doc(data[0]._id).update({
+      data: { status: 'inactive', role: 'buyer', updatedAt: timestamp }
+    })
+  }
+}
+
+async function updateAccountRole(authToken, payload = {}) {
+  const auth = await getAccountByToken(authToken)
+  if (!auth || !isAdmin(auth.account.role)) {
+    return { ok: false, code: 'PERMISSION_DENIED', message: '需要店长权限' }
+  }
+  const accountId = String(payload.accountId || payload.id || '').trim()
+  const role = String(payload.role || '').trim()
+  if (!accountId) return { ok: false, code: 'MISSING_ACCOUNT_ID', message: '缺少用户ID' }
+  if (!['buyer', 'manager'].includes(role)) {
+    return { ok: false, code: 'INVALID_ROLE', message: '当前仅支持设置普通用户或店长' }
+  }
+  if (accountId === auth.account.id) {
+    return { ok: false, code: 'CANNOT_UPDATE_SELF_ROLE', message: '不能修改当前登录账号的权限' }
+  }
+  const { data } = await db.collection('accounts').where({ id: accountId }).limit(1).get()
+  const account = data && data[0]
+  if (!account || isPlaceholderDoc(account)) return { ok: false, code: 'ACCOUNT_NOT_FOUND', message: '用户不存在' }
+  if (account.role === 'guest') return { ok: false, code: 'GUEST_ROLE_LOCKED', message: '游客账号不能设置权限' }
+  if (account.role === 'owner') return { ok: false, code: 'OWNER_ROLE_LOCKED', message: '店主账号不能在这里修改' }
+
+  const updateData = { role, status: account.status || 'active', updatedAt: now() }
+  await db.collection('accounts').doc(account._id).update({ data: updateData })
+  await syncAdminUserForAccount({ ...account, ...updateData }, role)
+  return { ok: true, data: publicAccount({ ...account, ...updateData }, auth.account.id) }
+}
+
 // ==================== 商品 ====================
 
 async function listProducts(params = {}, authToken = '') {
@@ -444,7 +583,7 @@ async function createProduct(body) {
     price: body.price || 0, originPrice: body.originPrice || 0, stock: body.stock || 0,
     totalStock: body.totalStock || body.stock || 0, sold: body.sold || 0, status: body.status || 'active',
     image: body.image || '', bannerImage: body.bannerImage || body.image || '',
-    priority: body.priority ? 1 : 0, limit: body.limit || 5, deadline: body.deadline || '',
+    priority: body.priority ? 1 : 0, limit: body.limit !== undefined ? body.limit : 0, deadline: body.deadline || '',
     deliveryText: body.deliveryText || '', deliveryRange: body.deliveryRange || '',
     storage: body.storage || '', sort: body.sort || Date.now(),
     specs: JSON.stringify(body.specs || []), detail: JSON.stringify(body.detail || []),
@@ -546,6 +685,7 @@ async function enrichOrdersWithAccounts(orders = []) {
 
 async function createOrder(body, authToken = '') {
   const auth = await requireUserSession(authToken)
+  await closeExpiredGroups()
   const sourceItems = Array.isArray(body.items) ? body.items : []
   if (!sourceItems.length) throw businessError('EMPTY_ORDER', '订单不能为空')
   const realPayment = isWechatPayEnabled() && body.payMode !== 'mock'
@@ -570,6 +710,10 @@ async function createOrder(body, authToken = '') {
 
   const id = createOrderNo()
   let orderDoc = null
+  const { data: activeGroups } = await db.collection('groups').where({ status: 'active' }).limit(1000).get()
+  const shopConfig = await getShopConfig().catch(() => ({}))
+  const checkoutConfig = (shopConfig && shopConfig.checkout) || {}
+  const nowTime = Date.now()
 
   await db.runTransaction(async transaction => {
     const orderItems = []
@@ -587,13 +731,19 @@ async function createOrder(body, authToken = '') {
       }
       const product = res.data[0]
       const limit = Number(product.limit || 0)
-      if (limit > 1 && count > limit) {
+      if (limit > 0 && count > limit) {
         throw businessError('BUY_LIMIT_EXCEEDED', `${product.name || item.name || item.productId}单次最多购买${limit}份`)
+      }
+      const group = activeGroupForProduct(activeGroups, item.productId, item.groupId || '', nowTime)
+      if (!group) {
+        throw businessError('GROUP_CLOSED', `${product.name || item.name || item.productId}所属团购已结束，请返回首页选择正在进行的团购`)
       }
       const price = Number(product.price || item.price || 0)
       productAmount += price * count
       orderItems.push({
         productId: product.id || item.productId,
+        groupId: group.id || item.groupId || '',
+        groupName: group.title || group.name || '',
         count,
         name: product.name || item.name || '',
         price,
@@ -604,7 +754,25 @@ async function createOrder(body, authToken = '') {
       })
     }
 
-    const deliveryFee = Number(body.deliveryFee || 0)
+    const baseDeliveryFee = Number(
+      checkoutConfig.deliveryFee !== undefined && checkoutConfig.deliveryFee !== null
+        ? checkoutConfig.deliveryFee
+        : body.deliveryFee || 0
+    )
+    const rawMinimumOrderAmount = checkoutConfig.minimumOrderAmount !== undefined && checkoutConfig.minimumOrderAmount !== ''
+      ? checkoutConfig.minimumOrderAmount
+      : checkoutConfig.freeShippingAmount !== undefined && checkoutConfig.freeShippingAmount !== ''
+        ? checkoutConfig.freeShippingAmount
+        : body.minimumOrderAmount !== undefined && body.minimumOrderAmount !== ''
+          ? body.minimumOrderAmount
+          : body.freeShippingAmount !== undefined && body.freeShippingAmount !== ''
+            ? body.freeShippingAmount
+            : 88
+    const minimumOrderAmount = Number(rawMinimumOrderAmount || 0)
+    if (minimumOrderAmount > 0 && productAmount < minimumOrderAmount) {
+      throw businessError('MINIMUM_ORDER_AMOUNT', `满￥${minimumOrderAmount.toFixed(2)}起下单，还差￥${(minimumOrderAmount - productAmount).toFixed(2)}`)
+    }
+    const deliveryFee = minimumOrderAmount > 0 ? 0 : baseDeliveryFee
     const discount = Number(body.discount || 0)
     const payable = Math.max(0, productAmount + deliveryFee - discount)
     const paymentExpiresAt = realPayment ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : ''
@@ -987,7 +1155,46 @@ async function submitReview(authToken, body = {}) {
 }
 
 // ==================== 团购 ====================
+async function closeExpiredGroups() {
+  const nowTime = Date.now()
+  const timestamp = now()
+  let closed = 0
+  const { data } = await db.collection('groups').where({ status: 'active' }).limit(1000).get()
+  const expired = (data || []).filter(row => !isPlaceholderDoc(row) && isExpiredDeadline(row.deadlineAt, nowTime))
+  for (const group of expired) {
+    await db.collection('groups').doc(group._id).update({
+      data: {
+        status: 'completed',
+        endedAt: group.endedAt || timestamp,
+        endReason: group.endReason || 'deadline',
+        updatedAt: timestamp
+      }
+    })
+    closed += 1
+  }
+  return { closed }
+}
+
+function groupContainsProduct(group = {}, productId = '') {
+  const id = String(productId || '')
+  if (!id) return false
+  const productIds = Array.isArray(group.productIds) ? group.productIds : []
+  if (productIds.some(item => String(item) === id)) return true
+  const products = safeJson(group.products)
+  return products.some(item => String(item.productId || item.id || item._id || '') === id)
+}
+
+function activeGroupForProduct(groups = [], productId = '', groupId = '', nowTime = Date.now()) {
+  return (groups || []).find(group => {
+    if (!group || group.status !== 'active') return false
+    if (isExpiredDeadline(group.deadlineAt, nowTime)) return false
+    if (groupId && String(group.id || group._id || '') !== String(groupId)) return false
+    return groupContainsProduct(group, productId)
+  })
+}
+
 async function listGroups(params = {}, authToken = '') {
+  await closeExpiredGroups()
   const auth = await getAccountByToken(authToken)
   const query = {}
   if (isAdmin(auth && auth.account && auth.account.role)) {
@@ -999,17 +1206,28 @@ async function listGroups(params = {}, authToken = '') {
   return data.filter(row => !isPlaceholderDoc(row))
 }
 
-async function getGroup(id, authToken = '') {
+async function getGroup(id, authToken = '', options = {}) {
+  await closeExpiredGroups()
   const auth = await getAccountByToken(authToken)
+  let group = null
   const { data } = await db.collection('groups').where({ id }).limit(1).get()
-  const group = data.find(row => !isPlaceholderDoc(row))
-  if (group && group.status && group.status !== 'active' && !isAdmin(auth && auth.account && auth.account.role)) return null
+  group = data.find(row => !isPlaceholderDoc(row)) || null
+  if (!group && id) {
+    try {
+      const doc = await db.collection('groups').doc(id).get()
+      group = doc && doc.data && !isPlaceholderDoc(doc.data) ? doc.data : null
+    } catch (e) {
+      group = null
+    }
+  }
+  if (group && group.status && group.status !== 'active' && !options.includeInactive && !isAdmin(auth && auth.account && auth.account.role)) return null
   return group || null
 }
 
 async function createGroup(body) {
   const id = `g${Date.now()}`
   const products = Array.isArray(body.products) ? body.products : []
+  const expired = isExpiredDeadline(body.deadlineAt)
   const productIds = Array.isArray(body.productIds) && body.productIds.length
     ? body.productIds
     : products.map(item => item.productId || item.id).filter(Boolean)
@@ -1018,7 +1236,7 @@ async function createGroup(body) {
     name: body.name || body.title || '',
     title: body.title || body.name || '',
     description: body.description || '',
-    status: body.status || 'active',
+    status: expired ? 'completed' : (body.status || 'active'),
     productIds,
     products,
     productCount: body.productCount !== undefined ? body.productCount : products.length,
@@ -1030,10 +1248,49 @@ async function createGroup(body) {
     fulfillmentMethods: Array.isArray(body.fulfillmentMethods) ? body.fulfillmentMethods : [],
     startDate: body.startDate || now(),
     endDate: body.endDate || '',
+    endedAt: expired ? now() : '',
+    endReason: expired ? 'deadline' : '',
     createdAt: now(), updatedAt: now()
   }
   await db.collection('groups').add({ data: doc })
   return await getGroup(id)
+}
+
+async function updateGroup(id, body = {}) {
+  const { data: docs } = await db.collection('groups').where({ id }).get()
+  if (!docs.length) return null
+  const products = Array.isArray(body.products) ? body.products : []
+  const expired = isExpiredDeadline(body.deadlineAt)
+  const productIds = Array.isArray(body.productIds) && body.productIds.length
+    ? body.productIds
+    : products.map(item => item.productId || item.id).filter(Boolean)
+  const updateData = {
+    name: body.name || body.title || '',
+    title: body.title || body.name || '',
+    description: body.description || '',
+    productIds,
+    products,
+    productCount: body.productCount !== undefined ? body.productCount : products.length,
+    totalStock: body.totalStock !== undefined ? body.totalStock : products.reduce((sum, item) => sum + Number(item.stock || item.totalStock || 0), 0),
+    deadline: body.deadline || '',
+    deadlineAt: body.deadlineAt || '',
+    deliveryTime: body.deliveryTime || '',
+    deliveryRange: body.deliveryRange || '',
+    fulfillmentMethods: Array.isArray(body.fulfillmentMethods) ? body.fulfillmentMethods : [],
+    updatedAt: now()
+  }
+  if (body.status) updateData.status = body.status
+  if (expired) {
+    updateData.status = 'completed'
+    updateData.endedAt = now()
+    updateData.endReason = 'deadline'
+  } else {
+    updateData.status = 'active'
+    updateData.endedAt = ''
+    updateData.endReason = ''
+  }
+  for (const d of docs) await db.collection('groups').doc(d._id).update({ data: updateData })
+  return await getGroup(id, '', { includeInactive: true })
 }
 
 async function updateGroupStatus(id, status) {
@@ -1246,6 +1503,17 @@ function noticeTimeText(value) {
   return `${y}-${m}-${d} ${h}:${min}`
 }
 
+function noticeProductNames(order = {}) {
+  const items = Array.isArray(order.items) ? order.items : safeJson(order.items)
+  const names = items.map(item => item.name).filter(Boolean).join('、')
+  return truncateNoticeValue(names || '初炉商品', 20)
+}
+
+function noticeAddressText(order = {}) {
+  const address = parseJson(order.address, {})
+  return truncateNoticeValue(address.detail || address.address || address.receiver || '统一配送', 20)
+}
+
 async function sendAfterSalesNotice(order = {}, scene = 'refund') {
   try {
     const config = await getShopConfig()
@@ -1257,29 +1525,38 @@ async function sendAfterSalesNotice(order = {}, scene = 'refund') {
       .limit(100)
       .get()
     if (!subscriptions || !subscriptions.length) return
-    const address = parseJson(order.address, {})
-    const customer = order.customer || order.buyerName || address.receiver || order.receiver || '用户'
-    const title = scene === 'order' ? '收到新订单' : scene === 'cancelled' ? '用户取消订单' : '新的售后申请'
     const amount = Number(order.refundAmount || order.payable || order.amount || 0)
     const page = scene === 'order'
       ? `pages/admin/order-detail/index?id=${order.id || order.orderNo || ''}`
       : scene === 'cancelled'
       ? 'pages/admin/after-sales/index?active=cancelled'
       : 'pages/admin/after-sales/index?active=pending'
-    const data = {
-      thing1: { value: truncateNoticeValue(title, 20) },
-      character_string2: { value: truncateNoticeValue(order.id || order.orderNo || order._id || '-', 32) },
-      amount3: { value: `${amount.toFixed(2)}元` },
-      thing4: { value: truncateNoticeValue(customer, 20) },
-      time5: { value: noticeTimeText(order.updatedAt || order.cancelledAt || order.createdAt) }
+    const data = scene === 'order' ? {
+      date4: { value: noticeTimeText(order.updatedAt || order.paidAt || order.createdAt) },
+      thing5: { value: noticeProductNames(order) },
+      thing7: { value: noticeAddressText(order) },
+      amount12: { value: `¥${amount.toFixed(2)}` },
+      thing26: { value: truncateNoticeValue(order.note || '请及时处理订单', 20) }
+    } : {
+      character_string1: { value: truncateNoticeValue(order.id || order.orderNo || order._id || '-', 32) },
+      time4: { value: noticeTimeText(order.updatedAt || order.cancelledAt || order.createdAt) },
+      amount8: { value: `¥${amount.toFixed(2)}` },
+      thing6: { value: noticeProductNames(order) },
+      phrase2: { value: scene === 'cancelled' ? '取消订单' : '仅退款' }
     }
     for (const item of subscriptions) {
       try {
-        await cloud.openapi.subscribeMessage.send({
+        await sendSubscribeMessage({
           touser: item.openid,
           templateId,
           page,
           data
+        })
+        console.log('[subscribeMessage.send] sent:', {
+          type: noticeType,
+          openid: item.openid,
+          templateId,
+          orderId: order.id || order.orderNo || order._id || ''
         })
       } catch (error) {
         console.error('[subscribeMessage.send] failed:', item.openid, error)
@@ -1368,6 +1645,22 @@ async function deleteAddress(id, authToken = '') {
 // ==================== 轮播 ====================
 const DEFAULT_BANNER_SETTINGS = { autoplay: true, interval: 3200, duration: 450, circular: true, showDots: true }
 
+function isCollectionMissing(error) {
+  const message = String(error && (error.errMsg || error.message || error.code) || '')
+  return /collection not exists|Table not exist|DATABASE_COLLECTION_NOT_EXIST|ResourceNotFound|-502005/i.test(message)
+}
+
+async function ensureCollection(name) {
+  try {
+    if (typeof db.createCollection === 'function') await db.createCollection(name)
+  } catch (error) {
+    const message = String(error && (error.errMsg || error.message || error.code) || '')
+    if (!/already exists|already exist|Collection already exists|DATABASE_COLLECTION_ALREADY_EXISTS|DATABASE_COLLECTION_ALREADY_EXIST|ResourceExist|Table exist|-502001|-501001/i.test(message)) {
+      throw error
+    }
+  }
+}
+
 function normalizeBannerConfig(body = {}) {
   const source = body || {}
   const settings = { ...DEFAULT_BANNER_SETTINGS, ...(source.settings || {}) }
@@ -1381,21 +1674,32 @@ function normalizeBannerConfig(body = {}) {
       duration: Number(settings.duration || DEFAULT_BANNER_SETTINGS.duration)
     },
     banners: banners
-      .map((item, index) => ({
-        ...item,
-        id: item.id || `banner_${index + 1}`,
-        sort: Number(item.sort || index + 1),
-        enabled: item.enabled !== false,
-        features: Array.isArray(item.features) ? item.features : []
-      }))
+      .map((item, index) => {
+        const { _id, _openid, createdAt, updatedAt, ...banner } = item || {}
+        return {
+          ...banner,
+          id: banner.id || `banner_${index + 1}`,
+          sort: Number(banner.sort || index + 1),
+          enabled: banner.enabled !== false,
+          title: '',
+          highlight: '',
+          subtitle: '',
+          tag: '',
+          features: []
+        }
+      })
       .sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0))
   }
 }
 
 async function getBannerConfig() {
-  const { data } = await db.collection('bannerConfig').where({ key: 'home' }).limit(1).get()
-  if (data.length) {
-    return normalizeBannerConfig(parseJson(data[0].value, {}))
+  try {
+    const { data } = await db.collection('bannerConfig').where({ key: 'home' }).limit(1).get()
+    if (data.length) {
+      return normalizeBannerConfig(parseJson(data[0].value, {}))
+    }
+  } catch (error) {
+    if (!isCollectionMissing(error)) throw error
   }
   const banners = await listBanners()
   return normalizeBannerConfig({ settings: DEFAULT_BANNER_SETTINGS, banners })
@@ -1403,7 +1707,15 @@ async function getBannerConfig() {
 
 async function updateBannerConfig(body) {
   const config = normalizeBannerConfig(body)
-  const { data: existing } = await db.collection('bannerConfig').where({ key: 'home' }).limit(1).get()
+  await ensureCollection('bannerConfig')
+  let existing = []
+  try {
+    const result = await db.collection('bannerConfig').where({ key: 'home' }).limit(1).get()
+    existing = result.data || []
+  } catch (error) {
+    if (!isCollectionMissing(error)) throw error
+    await ensureCollection('bannerConfig')
+  }
   const data = { key: 'home', value: JSON.stringify(config), updatedAt: now() }
   if (existing.length) {
     await db.collection('bannerConfig').doc(existing[0]._id).update({ data })
@@ -1415,18 +1727,32 @@ async function updateBannerConfig(body) {
 }
 
 async function listBanners() {
-  const { data } = await db.collection('banners').orderBy('sort', 'asc').limit(20).get()
-  return data
+  try {
+    const { data } = await db.collection('banners').orderBy('sort', 'asc').limit(20).get()
+    return data
+  } catch (error) {
+    if (isCollectionMissing(error)) return []
+    throw error
+  }
 }
 
 async function updateBanners(body) {
+  await ensureCollection('banners')
   // 简单处理：清除旧数据，写入新数据
-  const { data: existing } = await db.collection('banners').get()
+  let existing = []
+  try {
+    const result = await db.collection('banners').get()
+    existing = result.data || []
+  } catch (error) {
+    if (!isCollectionMissing(error)) throw error
+    await ensureCollection('banners')
+  }
   for (const d of existing) await db.collection('banners').doc(d._id).remove()
   const banners = Array.isArray(body) ? body : (body.banners || [])
   for (const b of banners) {
+    const { _id, _openid, createdAt, updatedAt, ...banner } = b || {}
     await db.collection('banners').add({
-      data: { ...b, createdAt: now(), updatedAt: now() }
+      data: { ...banner, createdAt: now(), updatedAt: now() }
     })
   }
   return await listBanners()
@@ -1451,6 +1777,9 @@ exports.main = async (event, context) => {
   console.log(`[businessApi] action: ${action}`)
 
   try {
+    if (!action || action === 'timer.closeExpiredGroups') {
+      return { ok: true, data: await closeExpiredGroups() }
+    }
     switch (action) {
       // 认证
       case 'authGuestLogin': return await authGuestLogin()
@@ -1461,6 +1790,8 @@ exports.main = async (event, context) => {
       case 'forgotPassword': return await forgotPassword(payload)
       case 'updateProfile': return await updateProfile(authToken, payload)
       case 'promoteAllUsersToManager': return await promoteAllUsersToManager(authToken)
+      case 'listAccounts': return await listAccounts(authToken)
+      case 'updateAccountRole': return await updateAccountRole(authToken, payload)
 
       // 商品
       case 'listProducts': return { ok: true, data: await listProducts(payload, authToken) }
@@ -1485,8 +1816,10 @@ exports.main = async (event, context) => {
       case 'listGroups': return { ok: true, data: await listGroups(payload, authToken) }
       case 'getGroup': return { ok: true, data: await getGroup(payload.id, authToken) }
       case 'createGroup': await requireAdminSession(authToken); return { ok: true, data: await createGroup(payload) }
+      case 'updateGroup': await requireAdminSession(authToken); return { ok: true, data: await updateGroup(payload.id, payload) }
       case 'updateGroupStatus': await requireAdminSession(authToken); return { ok: true, data: await updateGroupStatus(payload.id, payload.status) }
       case 'deleteGroup': await requireAdminSession(authToken); return await deleteGroup(payload.id)
+      case 'closeExpiredGroups': await requireAdminSession(authToken); return { ok: true, data: await closeExpiredGroups() }
 
       // 备货
       case 'listStock': await requireAdminSession(authToken); return { ok: true, data: await listStock(payload) }

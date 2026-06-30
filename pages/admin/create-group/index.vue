@@ -1,6 +1,6 @@
 <template>
-  <view class="page create-group">
-    <CustomNavBar mode="brand" :brand="shop.name" :slogan="shop.slogan" :logo="shop.logo" />
+  <view class="page create-group" :class="{ 'create-group--editing': isEditMode }">
+    <CustomNavBar showBack :title="isEditMode ? '编辑团购' : '发布团购'" />
 
     <view class="group-settings card">
       <view class="section-title">团基础信息</view>
@@ -36,6 +36,26 @@
       </view>
     </view>
 
+    <view v-if="selectedCount" class="selected-panel card">
+      <view class="section-head">
+        <view>
+          <view class="section-title">已选商品</view>
+          <view class="section-subtitle">{{ isEditMode ? '保存前请确认商品、库存和预计销售额' : '发布前请确认商品、库存和预计销售额' }}</view>
+        </view>
+        <view class="pool-count">预计 ￥{{ estimatedSales }}</view>
+      </view>
+      <scroll-view scroll-x class="selected-scroll" show-scrollbar="false">
+        <view class="selected-list">
+          <view v-for="item in selectedItems" :key="item.id" class="selected-item">
+            <image :src="item.image" mode="aspectFill" />
+            <view class="selected-item__name">{{ item.name }}</view>
+            <view class="selected-item__meta">￥{{ money(item.groupPrice) }} · {{ item.groupStock }}份</view>
+            <view class="selected-item__remove" @tap="removeProduct(item.id)">移除</view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
     <view class="toolbar card">
       <view class="search-box">
         <text>⌕</text>
@@ -56,26 +76,6 @@
         <switch :checked="showAllProducts" @change="showAllProducts = $event.detail.value" color="#e84f5f" />
         <text>显示已参团商品（{{ excludedCount }}款）</text>
       </view>
-    </view>
-
-    <view v-if="selectedCount" class="selected-panel card">
-      <view class="section-head">
-        <view>
-          <view class="section-title">已选商品</view>
-          <view class="section-subtitle">发布前请确认商品、库存和预计销售额</view>
-        </view>
-        <view class="pool-count">预计 ￥{{ estimatedSales }}</view>
-      </view>
-      <scroll-view scroll-x class="selected-scroll" show-scrollbar="false">
-        <view class="selected-list">
-          <view v-for="item in selectedItems" :key="item.id" class="selected-item">
-            <image :src="item.image" mode="aspectFill" />
-            <view class="selected-item__name">{{ item.name }}</view>
-            <view class="selected-item__meta">￥{{ money(item.groupPrice) }} · {{ item.groupStock }}份</view>
-            <view class="selected-item__remove" @tap="removeProduct(item.id)">移除</view>
-          </view>
-        </view>
-      </scroll-view>
     </view>
 
     <view class="product-pool card">
@@ -117,16 +117,16 @@
         <text>{{ totalStock }}</text> 份库存
         <view>{{ deadlineLabel }} · {{ groupForm.deliveryTime }}</view>
       </view>
-      <button :disabled="publishing" @tap="publishGroup">{{ publishing ? '发布中...' : '发布本场团' }}</button>
+      <button :disabled="publishing" @tap="publishGroup">{{ publishing ? submitLoadingText : submitText }}</button>
     </view>
-    <AdminTabBar active="create" />
+    <AdminTabBar v-if="!isEditMode" active="create" />
   </view>
 </template>
 
 <script>
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import AdminTabBar from '@/components/AdminTabBar/AdminTabBar.vue'
-import { getProducts, getCategories, saveGroup, getShopConfig, getActiveGroups } from '@/services/dataService'
+import { getProducts, getCategories, saveGroup, getShopConfig, getActiveGroups, getGroupById } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
 import { money } from '@/utils/format'
@@ -161,6 +161,8 @@ export default {
       products: [],
       selectedItems: [],
       productIdsInActiveGroups: [],
+      editGroupId: '',
+      editGroupStatus: '',
       showAllProducts: false,
       categoryOptions: [{ key: 'all', text: '全部' }],
       todayDate: defaultDeadlineDate(),
@@ -174,6 +176,24 @@ export default {
     }
   },
   computed: {
+    isEditMode() {
+      return !!this.editGroupId
+    },
+    submitText() {
+      if (this.isRestartingGroup) return '重新开团'
+      return this.isEditMode ? '保存修改' : '发布本场团'
+    },
+    submitLoadingText() {
+      if (this.isRestartingGroup) return '重新开团中...'
+      return this.isEditMode ? '保存中...' : '发布中...'
+    },
+    isRestartingGroup() {
+      return this.isEditMode && this.editGroupStatus && this.editGroupStatus !== 'active' && !this.isDeadlineExpired
+    },
+    isDeadlineExpired() {
+      const time = new Date(`${this.groupForm.deadlineDate}T${this.groupForm.deadlineTime}:00`).getTime()
+      return !Number.isNaN(time) && time <= Date.now()
+    },
     filteredProducts() {
       const kw = this.keyword.toLowerCase()
       return this.products.filter(item => {
@@ -223,8 +243,20 @@ export default {
         productId: product.productId || product.id || product._id || product.docId,
         groupPrice: String(product.price || ''),
         groupStock: String(stock),
-        limit: String(product.limit || 5)
+        limit: String(product.limit || 0)
       }
+    },
+    normalizeSelectedFromGroup(product) {
+      return this.normalizeSelected({
+        ...product,
+        id: product.productId || product.id,
+        productId: product.productId || product.id,
+        price: product.price,
+        stock: product.stock || product.totalStock,
+        groupPrice: String(product.price || product.groupPrice || ''),
+        groupStock: String(product.stock || product.totalStock || product.groupStock || ''),
+        limit: String(product.limit || 0)
+      })
     },
     isProductInActiveGroup(product) {
       const activeIds = this.productIdsInActiveGroups
@@ -280,7 +312,7 @@ export default {
       if (!this.groupForm.deadlineDate || !this.groupForm.deadlineTime) return '请选择截单时间'
       if (Number.isNaN(new Date(`${this.groupForm.deadlineDate}T${this.groupForm.deadlineTime}:00`).getTime())) return '截单时间无效'
       if (!this.selectedItems.length) return '请至少选择 1 款商品'
-      const invalid = this.selectedItems.find(item => Number(item.groupPrice) <= 0 || Number(item.groupStock) <= 0 || Number(item.limit) <= 0)
+      const invalid = this.selectedItems.find(item => Number(item.groupPrice) <= 0 || Number(item.groupStock) <= 0 || Number(item.limit || 0) < 0)
       if (invalid) return `请检查「${invalid.name}」的价格、库存和限购`
       return ''
     },
@@ -293,9 +325,9 @@ export default {
       if (this.publishing) return
       const confirmed = await new Promise(resolve => {
         uni.showModal({
-          title: '发布确认',
-          content: `本场团将发布 ${this.selectedCount} 款商品，共 ${this.totalStock} 份库存，预计销售额 ￥${this.estimatedSales}。\n${this.deadlineLabel}\n${this.groupForm.deliveryTime}`,
-          confirmText: '确认发布',
+          title: this.isEditMode ? '保存确认' : '发布确认',
+          content: `本场团将${this.isRestartingGroup ? '重新开团' : this.isEditMode ? '保存' : '发布'} ${this.selectedCount} 款商品，共 ${this.totalStock} 份库存，预计销售额 ￥${this.estimatedSales}。\n${this.deadlineLabel}\n${this.groupForm.deliveryTime}`,
+          confirmText: this.isRestartingGroup ? '确认开团' : this.isEditMode ? '确认保存' : '确认发布',
           success: ({ confirm }) => resolve(confirm),
           fail: () => resolve(false)
         })
@@ -304,6 +336,7 @@ export default {
       this.publishing = true
       try {
         await saveGroup({
+          id: this.editGroupId,
           title: this.groupForm.title,
           deadline: this.deadlineLabel,
           deadlineAt: this.buildDeadlineAt(),
@@ -321,6 +354,7 @@ export default {
               image,
               imageFileID: image,
               desc: item.desc,
+              specs: item.specs || [],
               categoryKey: item.categoryKey,
               price: Number(item.groupPrice),
               originPrice: Number(item.originPrice || item.groupPrice),
@@ -342,8 +376,8 @@ export default {
             }
           })
         })
-        uni.showToast({ title: '本场团已发布', icon: 'success' })
-        setTimeout(() => uni.redirectTo({ url: '/pages/admin/dashboard/index' }), 600)
+        uni.showToast({ title: this.isRestartingGroup ? '团购已重新开始' : this.isEditMode ? '团购已保存' : '本场团已发布', icon: 'success' })
+        setTimeout(() => uni.redirectTo({ url: this.isEditMode ? '/pages/admin/group-list/index' : '/pages/admin/dashboard/index' }), 600)
       } catch (error) {
         showCloudError(error)
       } finally {
@@ -353,7 +387,13 @@ export default {
     async loadData() {
       this.loading = true
       try {
-        const [categories, products, shopConfig, activeGroups] = await Promise.all([getCategories(), getProducts(), getShopConfig(), getActiveGroups()])
+        const [categories, products, shopConfig, activeGroups, editGroup] = await Promise.all([
+          getCategories(),
+          getProducts(),
+          getShopConfig(),
+          getActiveGroups(),
+          this.editGroupId ? getGroupById(this.editGroupId, true).catch(() => null) : Promise.resolve(null)
+        ])
         this.categoryOptions = categories.length ? categories : [{ key: 'all', text: '全部' }]
         this.shop = shopConfig
         const activeProducts = (products || []).filter(item => item && item.id && item.status === 'active')
@@ -362,6 +402,7 @@ export default {
         const productIds = []
         const groupsArray = Array.isArray(activeGroups) ? activeGroups : []
         groupsArray.forEach(group => {
+          if (this.editGroupId && group.id === this.editGroupId) return
           if (Array.isArray(group.productIds)) {
             group.productIds.forEach(id => {
               if (id) productIds.push(String(id))
@@ -373,15 +414,29 @@ export default {
           })
         })
         this.productIdsInActiveGroups = [...new Set(productIds)]
+        if (editGroup) this.applyEditGroup(editGroup)
       } catch (e) {
         this.productIdsInActiveGroups = []
       } finally {
         this.loading = false
       }
+    },
+    applyEditGroup(group) {
+      this.editGroupStatus = group.status || ''
+      this.groupForm = {
+        title: group.title || group.name || this.groupForm.title,
+        deadlineDate: group.deadlineAt ? dateValue(new Date(group.deadlineAt)) : this.groupForm.deadlineDate,
+        deadlineTime: group.deadlineAt ? `${pad2(new Date(group.deadlineAt).getHours())}:${pad2(new Date(group.deadlineAt).getMinutes())}` : this.groupForm.deadlineTime,
+        deliveryTime: group.deliveryTime || this.groupForm.deliveryTime,
+        deliveryRange: group.deliveryRange || this.groupForm.deliveryRange
+      }
+      this.selectedItems = (Array.isArray(group.products) ? group.products : []).map(this.normalizeSelectedFromGroup)
+      this.showAllProducts = true
     }
   },
-  onLoad() {
+  onLoad(query = {}) {
     if (!ensurePageAccess('/pages/admin/create-group/index', '需要店长权限')) return
+    this.editGroupId = query.id || ''
     this.loadData()
   }
 }
@@ -391,6 +446,7 @@ export default {
 @import '@/common/theme.scss';
 
 .create-group { padding-bottom: 310rpx; }
+.create-group--editing { padding-bottom: 190rpx; }
 .group-settings,.toolbar,.selected-panel,.product-pool { margin-top:22rpx; padding:26rpx; }
 .section-title { @include text-card-title; font-size:32rpx; font-weight:$font-weight-heavy; }
 .section-subtitle { margin-top:8rpx; @include text-caption($color-text-light); }
@@ -437,9 +493,11 @@ export default {
 .pool-item__meta text:first-child { color:$color-primary; font-weight:$font-weight-bold; }
 .select-dot { @include flex-center; flex-shrink:0; width:46rpx; height:46rpx; color:#fff; background:$gradient-primary; border-radius:50%; font-size:28rpx; font-weight:$font-weight-bold; }
 .summary-bar { position:fixed; left:0; right:0; bottom:calc(142rpx + env(safe-area-inset-bottom)); z-index:40; display:flex; align-items:center; gap:20rpx; padding:18rpx 24rpx; background:rgba(255,253,249,.98); box-shadow:$shadow-bottom-sm; border-top:1rpx solid $color-border-light; }
+.create-group--editing .summary-bar { bottom:0; z-index:60; padding-bottom:calc(18rpx + env(safe-area-inset-bottom)); }
 .summary-bar > view { flex:1; min-width:0; color:$color-text-main; font-size:26rpx; font-weight:$font-weight-bold; }
 .summary-bar > view > text { color:$color-primary; font-size:32rpx; margin-right:6rpx; }
 .summary-bar > view view { margin-top:6rpx; color:$color-text-light; font-size:22rpx; font-weight:$font-weight-regular; @include text-ellipsis; }
-.summary-bar button { flex:0 0 220rpx; height:82rpx; color:#fff; background:$color-primary; border-radius:$radius-md; font-size:28rpx; font-weight:$font-weight-heavy; line-height:82rpx; box-shadow:none; }
+.summary-bar button { flex:0 0 220rpx; display:flex; align-items:center; justify-content:center; height:82rpx; margin:0; padding:0 18rpx; color:#fff; background:$color-primary; border-radius:$radius-md; font-size:28rpx; font-weight:$font-weight-heavy; line-height:1; text-align:center; box-shadow:none; }
+.summary-bar button::after { border:0; }
 .summary-bar button[disabled] { background:$color-text-light; box-shadow:none; }
 </style>

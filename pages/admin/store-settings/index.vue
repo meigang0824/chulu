@@ -126,6 +126,7 @@ export default {
         { key: 'serviceText', label: '支付说明', placeholder: '例如：新鲜现做，按单打包发货，感谢等待～' },
         { key: 'payText', label: '支付按钮文案', placeholder: '例如：微信支付' },
         { key: 'deliveryFee', label: '默认运费', placeholder: '例如：6', number: true },
+        { key: 'minimumOrderAmount', label: '最低下单金额', placeholder: '例如：88', number: true },
         { key: 'groupDiscount', label: '默认团购优惠', placeholder: '例如：4', number: true }
       ]
     }
@@ -143,7 +144,12 @@ export default {
         ...config,
         checkout: {
           ...{},
-          ...(config.checkout || {})
+          ...(config.checkout || {}),
+          minimumOrderAmount: Number(config.checkout && config.checkout.minimumOrderAmount !== undefined && config.checkout.minimumOrderAmount !== ''
+            ? config.checkout.minimumOrderAmount
+            : (config.checkout && config.checkout.freeShippingAmount !== undefined && config.checkout.freeShippingAmount !== '')
+              ? config.checkout.freeShippingAmount
+              : 88)
         }
       }
       await this.resolveLogoPreview()
@@ -207,6 +213,8 @@ export default {
           checkout: {
             ...this.form.checkout,
             deliveryFee: Number(this.form.checkout.deliveryFee || 0),
+            minimumOrderAmount: Number(this.form.checkout.minimumOrderAmount || 0),
+            freeShippingAmount: Number(this.form.checkout.minimumOrderAmount || 0),
             groupDiscount: Number(this.form.checkout.groupDiscount || 0)
           }
         }

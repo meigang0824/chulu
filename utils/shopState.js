@@ -58,16 +58,28 @@ export function addCartItem(product = {}, count = 1) {
   const index = items.findIndex(item => item.id === id)
   const rawLimit = Number(product.limit || 0)
   const stock = Number(product.stock || 0)
-  const max = rawLimit > 1 ? rawLimit : 99
+  const max = rawLimit > 0 ? rawLimit : 99
   const nextCount = Math.max(1, Number(count || 1))
   const imageFileID = normalizeImageUrl(product.imageFileID || product.image, IMAGE_ASSETS.product)
   const image = displayImage(product.image || product.imageFileID || imageFileID)
   if (index >= 0) {
-    items[index] = { ...items[index], count: Math.min(max, Number(items[index].count || 0) + nextCount), stock, limit: max, image, imageFileID }
+    items[index] = {
+      ...items[index],
+      count: Math.min(max, Number(items[index].count || 0) + nextCount),
+      stock,
+      limit: rawLimit,
+      image,
+      imageFileID,
+      groupId: product.groupId || items[index].groupId || '',
+      groupName: product.groupName || items[index].groupName || '',
+      deliveryTime: product.deliveryTime || items[index].deliveryTime || ''
+    }
   } else {
     items.push({
       id,
       productId: id,
+      groupId: product.groupId || '',
+      groupName: product.groupName || '',
       name: product.name || '',
       desc: product.desc || '',
       price: Number(product.price || 0),
@@ -75,7 +87,8 @@ export function addCartItem(product = {}, count = 1) {
       image,
       imageFileID,
       stock,
-      limit: max,
+      limit: rawLimit,
+      deliveryTime: product.deliveryTime || '',
       count: Math.min(max, nextCount)
     })
   }
@@ -83,10 +96,11 @@ export function addCartItem(product = {}, count = 1) {
 }
 
 export function updateCartItemCount(id, count) {
+  if (Number(count || 0) <= 0) return removeCartItems([id])
   const items = getCartItems().map(item => {
     if (item.id !== id) return item
     const rawLimit = Number(item.limit || 0)
-    const max = rawLimit > 1 ? rawLimit : 99
+    const max = rawLimit > 0 ? rawLimit : 99
     return { ...item, count: Math.min(max, Math.max(1, Number(count || 1))) }
   })
   return saveCartItems(items)
@@ -148,7 +162,7 @@ export function setFavorite(product = {}, liked = true) {
         image: product.imageFileID || product.image || '',
         imageFileID: product.imageFileID || product.image || '',
         stock: Number(product.stock || 0),
-        limit: Number(product.limit || 5),
+        limit: Number(product.limit || 0),
         savedAt: new Date().toISOString()
       })
     } else {

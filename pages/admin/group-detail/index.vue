@@ -11,7 +11,10 @@
       <view class="info-card card">
         <view class="info-card__head">
           <view class="info-card__title">{{ group.name }}</view>
-          <StatusTag :type="group.status === 'active' ? 'active' : 'completed'" :text="group.status === 'active' ? '进行中' : '已结束'" />
+          <view class="info-card__actions">
+            <StatusTag :type="group.status === 'active' ? 'active' : 'completed'" :text="group.status === 'active' ? '进行中' : '已结束'" />
+            <button class="info-card__edit" @tap="editGroup">编辑</button>
+          </view>
         </view>
         <view class="info-card__meta">
           <view class="meta-item">
@@ -24,7 +27,6 @@
           </view>
         </view>
       </view>
-
       <!-- 关联商品 -->
       <view class="products-card card">
         <view class="card-title">关联商品 ({{ products.length }}款)</view>
@@ -67,7 +69,6 @@
       @action="goBack"
     />
 
-    <AdminTabBar active="create" />
   </view>
 </template>
 
@@ -76,15 +77,14 @@ import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import StatusTag from '@/components/StatusTag/StatusTag.vue'
 import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
 import EmptyState from '@/components/EmptyState/EmptyState.vue'
-import AdminTabBar from '@/components/AdminTabBar/AdminTabBar.vue'
 import { groupAPI } from '@/services/apiClient'
 import { getAdminOrders, hydrateGroupImages } from '@/services/dataService'
 import { ensurePageAccess, getAuthSession } from '@/utils/auth'
-import { IMAGE_ASSETS } from '@/utils/image'
+import { cloudImageHttpsUrl, IMAGE_ASSETS } from '@/utils/image'
 import { money } from '@/utils/format'
 
 export default {
-  components: { CustomNavBar, StatusTag, SkeletonBlock, EmptyState, AdminTabBar },
+  components: { CustomNavBar, StatusTag, SkeletonBlock, EmptyState },
   data() {
     return {
       loading: true,
@@ -104,8 +104,25 @@ export default {
       setTimeout(() => uni.navigateBack(), 600)
     }
   },
+  onShareAppMessage(options = {}) {
+    const dataset = options.target && options.target.dataset ? options.target.dataset : {}
+    const groupId = dataset.groupId || (this.group && this.group.id) || ''
+    const groupTitle = dataset.groupTitle || (this.group && this.group.name) || '初炉新鲜烘焙团购'
+
+    return {
+      title: `${groupTitle} · 初炉新鲜烘焙`,
+      path: groupId ? `/pages/category/index?groupId=${groupId}` : '/pages/home/index',
+      imageUrl: this.shareCoverImage()
+    }
+  },
   methods: {
     money,
+    shareCoverImage() {
+      const product = (this.products && this.products[0]) || {}
+      const image = product.bannerImage || product.image || product.imageFileID || product.bannerImageFileID || ''
+      if (String(image).startsWith('cloud://')) return cloudImageHttpsUrl(image) || image
+      return image || cloudImageHttpsUrl(IMAGE_ASSETS.banner)
+    },
     authToken() {
       const session = getAuthSession()
       return session && session.token ? session.token : ''
@@ -160,6 +177,10 @@ export default {
     },
     goBack() {
       uni.navigateBack()
+    },
+    editGroup() {
+      if (!this.group || !this.group.id) return
+      uni.navigateTo({ url: `/pages/admin/create-group/index?id=${this.group.id}` })
     }
   }
 }
@@ -168,13 +189,30 @@ export default {
 <style lang="scss" scoped>
 @import '@/common/theme.scss';
 
-.group-detail-page { padding-bottom: 200rpx; }
+.group-detail-page { padding-bottom: 80rpx; }
 
 .loading-state { padding: 24rpx; }
 
 .info-card { margin-top: 20rpx; padding: 24rpx; }
-.info-card__head { display: flex; align-items: center; justify-content: space-between; }
-.info-card__title { font-size: 34rpx; font-weight: 800; color: $color-text-main; }
+.info-card__head { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; }
+.info-card__title { flex: 1; min-width: 0; font-size: 34rpx; font-weight: 800; color: $color-text-main; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-card__actions { flex-shrink: 0; display: flex; align-items: center; gap: 12rpx; }
+.info-card__edit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 44rpx;
+  margin: 0;
+  padding: 0;
+  color: $color-primary;
+  background: $color-primary-light;
+  border-radius: $radius-pill;
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 44rpx;
+}
+.info-card__edit::after { border: 0; }
 .info-card__meta { display: flex; gap: 40rpx; margin-top: 20rpx; }
 .meta-item { display: flex; flex-direction: column; }
 .meta-label { font-size: 22rpx; color: $color-text-light; }

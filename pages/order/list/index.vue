@@ -14,8 +14,13 @@
         </view>
       </view>
     </scroll-view>
+    <view v-if="isLoggedIn" class="search-card card">
+      <text>⌕</text>
+      <input v-model.trim="keyword" placeholder="搜索订单号、商品、收货人或手机号" />
+      <text v-if="keyword" class="search-card__clear" @tap="keyword = ''">×</text>
+    </view>
     <view v-if="isLoggedIn && !loading" class="order-hint">
-      {{ active === 'all' ? `共 ${orders.length} 笔订单` : `当前筛选 ${filteredOrders.length} 笔订单` }}
+      {{ orderHintText }}
     </view>
     <view v-if="loading" class="order-skeleton">
       <view v-for="index in 3" :key="index" class="order-skeleton__card card">
@@ -31,8 +36,8 @@
     />
     <EmptyState
       v-else-if="!filteredOrders.length"
-      title="还没有相关订单"
-      desc="下单成功后，订单进度会在这里更新。"
+      :title="emptyTitle"
+      :desc="emptyDesc"
       action-text="去首页看看"
       @action="goHome"
     />
@@ -65,6 +70,7 @@ export default {
   data() {
     return {
       orders: [],
+      keyword: '',
       loading: true,
       active: 'all',
       isLoggedIn: false,
@@ -84,7 +90,7 @@ export default {
       this.loading = false
       return
     }
-    this.loadOrders()
+    this.loadOrders({ silent: this.orders.length > 0 })
   },
   onShareAppMessage() {
     return {
@@ -94,17 +100,55 @@ export default {
   },
   watch: {
     active() {
-      this.loadOrders()
+      this.loadOrders({ silent: this.orders.length > 0 })
     }
   },
   computed: {
     filteredOrders() {
-      if (this.active === 'all') return this.orders
-      if (this.active === 'finished') return this.orders.filter(item => ['completed', 'cancelled'].includes(item.status))
-      return this.orders.filter(item => item.status === this.active)
+      const keyword = this.keyword.trim().toLowerCase()
+      let list = this.orders
+      if (this.active === 'finished') {
+        list = list.filter(item => ['completed', 'cancelled'].includes(item.status))
+      } else if (this.active !== 'all') {
+        list = list.filter(item => item.status === this.active)
+      }
+      if (!keyword) return list
+      return list.filter(item => this.orderSearchText(item).includes(keyword))
+    },
+    orderHintText() {
+      if (this.keyword.trim()) return `找到 ${this.filteredOrders.length} 笔订单`
+      return this.active === 'all' ? `共 ${this.orders.length} 笔订单` : `当前筛选 ${this.filteredOrders.length} 笔订单`
+    },
+    emptyTitle() {
+      return this.keyword.trim() ? '没有匹配订单' : '还没有相关订单'
+    },
+    emptyDesc() {
+      return this.keyword.trim() ? '换个订单号、商品名或手机号再试试。' : '下单成功后，订单进度会在这里更新。'
     }
   },
   methods: {
+    orderSearchText(order = {}) {
+      const items = Array.isArray(order.items) ? order.items : []
+      const values = [
+        order.id,
+        order.orderNo,
+        order.detailId,
+        order.customer,
+        order.receiver,
+        order.phone,
+        order.fullPhone,
+        order.address,
+        order.shortAddress,
+        order.statusText,
+        order.payStatusText,
+        order.deliveryText,
+        order.fulfillmentMethod,
+        order.amount,
+        order.payable,
+        ...items.flatMap(item => [item.name, item.productId, item.count, item.price])
+      ]
+      return values.filter(value => value !== undefined && value !== null).join(' ').toLowerCase()
+    },
     cardActionText(order) {
       if (order.refundStatus === 'pending') return order.refundType === 'cancelOrder' ? '取消审核中' : '退款处理中'
       if (['paid', 'pendingDelivery'].includes(order.status)) return '申请取消'
@@ -113,8 +157,9 @@ export default {
       if (order.status === 'cancelled') return '再次购买'
       return '查看进度'
     },
-    async loadOrders() {
-      this.loading = true
+    async loadOrders(options = {}) {
+      const silent = options.silent === true
+      if (!silent) this.loading = true
       const seq = ++this.loadSeq
       const orders = await getBuyerOrders('all')
       if (seq !== this.loadSeq) return
@@ -249,6 +294,37 @@ export default {
   background: $color-primary-light;
   border-color: rgba(255,92,114,.20);
   font-weight: 800;
+}
+
+.search-card {
+  display: flex;
+  align-items: center;
+  height: 82rpx;
+  margin-bottom: 20rpx;
+  padding: 0 26rpx;
+  background: $color-card;
+  border-radius: $radius-pill;
+  box-sizing: border-box;
+}
+
+.search-card text {
+  flex-shrink: 0;
+  margin-right: 14rpx;
+  color: $color-text-placeholder;
+  font-size: 34rpx;
+}
+
+.search-card input {
+  flex: 1;
+  min-width: 0;
+  color: $color-text-main;
+  font-size: 28rpx;
+}
+
+.search-card__clear {
+  margin: 0 0 0 12rpx;
+  color: $color-text-placeholder;
+  font-size: 30rpx;
 }
 
 .order-hint {

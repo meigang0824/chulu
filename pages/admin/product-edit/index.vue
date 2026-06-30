@@ -2,10 +2,6 @@
   <view class="page product-edit">
     <CustomNavBar :title="isEditMode ? '编辑商品' : '新增商品'" showBack />
 
-    <view class="tip-bar">
-      {{ isEditMode ? '维护商品信息，保持团购页展示准确' : '发布优质团购商品，丰富每日团购内容' }}
-    </view>
-
     <view class="form-card card">
       <view class="upload-box">
         <view class="form-label">商品图片 <text>*</text></view>
@@ -21,13 +17,26 @@
         </view>
       </view>
 
-      <view class="form-line" v-for="field in fields" :key="field.key">
+      <view class="form-line" v-for="field in baseFields" :key="field.key">
         <view class="form-label">{{ field.label }} <text v-if="field.required">*</text></view>
         <input v-if="field.type === 'input'" v-model.trim="form[field.key]" :placeholder="field.placeholder" />
-        <input v-else-if="field.type === 'number'" v-model.trim="form[field.key]" type="digit" :placeholder="field.placeholder" />
         <picker v-else-if="field.type === 'category'" :range="categoryOptions" range-key="text" :value="categoryIndex" @change="setCategory">
           <view class="picker-line">{{ categoryLabel }} <text>〉</text></view>
         </picker>
+      </view>
+
+      <view class="form-row">
+        <view class="form-line form-line--half" v-for="field in priceFields" :key="field.key">
+          <view class="form-label">{{ field.label }} <text v-if="field.required">*</text></view>
+          <input v-model.trim="form[field.key]" type="digit" :placeholder="field.placeholder" />
+        </view>
+      </view>
+
+      <view class="form-row">
+        <view class="form-line form-line--half" v-for="field in stockFields" :key="field.key">
+          <view class="form-label">{{ field.label }} <text v-if="field.required">*</text></view>
+          <input v-model.trim="form[field.key]" type="digit" :placeholder="field.placeholder" />
+        </view>
       </view>
 
       <view class="form-line form-line--textarea">
@@ -63,7 +72,11 @@
               <text>￥{{ money(form.price || 0) }}</text>
               <text v-if="form.originPrice" class="origin">￥{{ money(form.originPrice) }}</text>
             </view>
-            <view class="preview-product__stock">库存 {{ form.stock || '0' }} 份</view>
+            <view class="preview-product__stock">
+              <text>库存 {{ form.stock || '0' }} 份</text>
+              <text v-if="form.spec">规格 {{ form.spec }}</text>
+              <text>{{ limitPreviewText }}</text>
+            </view>
           </view>
         </view>
       </view>
@@ -101,16 +114,24 @@ export default {
         price: '',
         originPrice: '',
         stock: '',
+        spec: '',
+        limit: '0',
         desc: '',
         detailText: '',
         showActivity: true
       },
-      fields: [
+      baseFields: [
         { key: 'categoryKey', label: '商品分类', type: 'category', placeholder: '请选择分类', required: true },
         { key: 'name', label: '商品名称', type: 'input', placeholder: '请输入商品名称，如 草莓奶油盒子', required: true },
+        { key: 'spec', label: '商品规格', type: 'input', placeholder: '如 6枚装 / 500g / 1盒' }
+      ],
+      priceFields: [
         { key: 'price', label: '团购价（元）', type: 'number', placeholder: '请输入团购价', required: true },
-        { key: 'originPrice', label: '原价（元）', type: 'number', placeholder: '请输入原价', required: true },
-        { key: 'stock', label: '库存数量（份）', type: 'number', placeholder: '请输入库存数量', required: true }
+        { key: 'originPrice', label: '原价（元）', type: 'number', placeholder: '请输入原价', required: true }
+      ],
+      stockFields: [
+        { key: 'stock', label: '库存数量（份）', type: 'number', placeholder: '请输入库存数量', required: true },
+        { key: 'limit', label: '单次限购数量（份）', type: 'number', placeholder: '填0表示不限购' }
       ]
     }
   },
@@ -124,6 +145,10 @@ export default {
     categoryLabel() {
       const found = this.categoryOptions.find(item => item.key === this.form.categoryKey)
       return found ? found.text : '请选择分类'
+    },
+    limitPreviewText() {
+      const limit = Number(this.form.limit || 0)
+      return limit > 0 ? `单次最多 ${limit} 份` : '不限购'
     }
   },
   methods: {
@@ -153,13 +178,14 @@ export default {
     validate() {
       const required = ['name', 'price', 'originPrice', 'stock']
       for (const key of required) {
-        const field = this.fields.find(f => f.key === key)
+        const field = [...this.baseFields, ...this.priceFields, ...this.stockFields].find(f => f.key === key)
         if (!String(this.form[key] || '').trim()) return `请填写"${(field && field.label) || key}"`
       }
       if (!this.form.image && !this.isEditMode) return '请上传商品图片'
       if (Number(this.form.price) <= 0) return '团购价需大于 0'
       if (Number(this.form.stock) <= 0) return '库存需大于 0'
       if (Number(this.form.originPrice) < Number(this.form.price)) return '原价不能低于团购价'
+      if (Number(this.form.limit || 0) < 0) return '限购数量不能小于 0'
       return ''
     },
     async submit() {
@@ -186,13 +212,14 @@ export default {
           sold: (this.originalProduct && Number(this.originalProduct.sold)) || 0,
           stock: Number(this.form.stock),
           totalStock: Number(this.form.stock),
-          limit: 5,
+          limit: Number(this.form.limit || 0),
           deadline: '今日 22:00 截单',
           deliveryTime: '次日打包发货',
           deliveryRange: '快递发货 / 门店自提 / 同城配送',
           storage: '0~4℃冷藏保存',
           taste: this.form.desc || '新鲜烘焙',
           ingredients: [],
+          specs: this.form.spec ? [{ name: '规格', value: this.form.spec }] : [],
           image,
           bannerImage: image,
           gallery: image ? [image] : [],
@@ -222,6 +249,9 @@ export default {
         return
       }
       this.originalProduct = product
+      const spec = Array.isArray(product.specs) && product.specs.length
+        ? String(product.specs[0].value || product.specs[0].text || product.specs[0].name || '').trim()
+        : ''
       this.form = {
         id: product.id,
         image: product.imageFileID || product.image || '',
@@ -231,6 +261,8 @@ export default {
         price: String(product.price || ''),
         originPrice: String(product.originPrice || ''),
         stock: String(product.totalStock || product.stock || ''),
+        spec,
+        limit: String(product.limit || 0),
         desc: product.desc || product.subtitle || '',
         detailText: (product.detail || []).join('\n'),
         showActivity: Boolean(product.priority)
@@ -251,7 +283,6 @@ export default {
 @import '@/common/theme.scss';
 
 .product-edit { padding-bottom: 240rpx; }
-.tip-bar { margin-top: 16rpx; padding: 14rpx 22rpx; color: $color-text-regular; font-size: 24rpx; background: $color-bg-light; border: 1rpx solid $color-border-light; border-radius: $radius-md; }
 .form-card { margin-top: 22rpx; padding: 28rpx; }
 .form-label { color: $color-text-main; font-size: 28rpx; font-weight: 800; }
 .form-label text { color: $color-primary; }
@@ -263,6 +294,8 @@ export default {
 .upload-box__inner > view text { margin-top: 8rpx; font-size: 24rpx; color: $color-text-light; }
 .upload-box__inner > view text:last-child { font-size: 22rpx; }
 .form-line { padding: 22rpx 0; border-bottom: 1rpx solid $color-border-light; }
+.form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18rpx; border-bottom: 1rpx solid $color-border-light; }
+.form-row .form-line { min-width: 0; border-bottom: none; }
 .form-line input, .picker-line { width: 100%; height: 72rpx; margin-top: 12rpx; padding: 0 18rpx; color: $color-text-main; background: $color-bg-light; border: 1rpx solid $color-border-light; border-radius: $radius-md; font-size: 26rpx; }
 .picker-line { display: flex; align-items: center; justify-content: space-between; color: $color-text-regular; }
 .form-line textarea { width: 100%; height: 110rpx; margin-top: 14rpx; padding: 16rpx 18rpx; background: $color-bg-light; border: 1rpx solid $color-border-light; border-radius: $radius-md; color: $color-text-main; font-size: 25rpx; }
@@ -280,7 +313,7 @@ export default {
 .preview-product__price { margin-top: 14rpx; display: flex; align-items: baseline; gap: 12rpx; }
 .preview-product__price text { color: $color-primary; font-size: 34rpx; font-weight: 800; }
 .preview-product__price .origin { color: $color-text-light; font-size: 24rpx; text-decoration: line-through; font-weight: 400; }
-.preview-product__stock { margin-top: 8rpx; font-size: 24rpx; color: $color-text-regular; }
+.preview-product__stock { display: flex; flex-direction: column; gap: 4rpx; margin-top: 8rpx; font-size: 24rpx; color: $color-text-regular; }
 .bottom-action { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255,253,249,.98); box-shadow: $shadow-bottom; border-top: 1rpx solid $color-border-light; }
 .bottom-action button { width: 100%; height: 88rpx; color: #fff; background: $gradient-primary; border-radius: $radius-pill; font-size: 30rpx; font-weight: 700; line-height: 88rpx; box-shadow: $shadow-btn; }
 .bottom-action button[disabled] { background: $color-text-light; box-shadow: none; }

@@ -6,11 +6,15 @@ const db = cloud.database()
 
 const CONFIG = {
   appid: process.env.WECHAT_APPID || 'wx58f4dfa2c16fe2f0',
+  secret: process.env.WECHAT_SECRET || '',
   mchid: process.env.WECHAT_PAY_MCH_ID || '1747393367',
   serialNo: process.env.WECHAT_PAY_SERIAL_NO || '',
   apiV3Key: process.env.WECHAT_PAY_API_V3_KEY || '',
   privateKey: process.env.WECHAT_PAY_PRIVATE_KEY || ''
 }
+
+let cachedAccessToken = null
+let cachedAccessTokenExpiresAt = 0
 
 function now() { return new Date().toISOString() }
 function parseJson(value, fallback) {
@@ -30,6 +34,22 @@ function randomNonce(size = 16) {
 }
 function amountToFen(amount) {
   return Math.max(1, Math.round(Number(amount || 0) * 100))
+}
+function truncateNoticeValue(value, max = 20) {
+  const text = String(value || '').trim()
+  return (text || '-').slice(0, max)
+}
+function noticeTimeText(value) {
+  return String(value || now()).replace('T', ' ').replace(/\.\d{3}Z$/, '').slice(0, 19)
+}
+function orderProductNames(order = {}) {
+  const items = safeJson(order.items)
+  const names = items.map(item => item.name).filter(Boolean).join('、')
+  return truncateNoticeValue(names || '初炉商品', 20)
+}
+function orderAddressText(order = {}) {
+  const address = parseJson(order.address, {})
+  return truncateNoticeValue(address.detail || address.address || address.receiver || '统一配送', 20)
 }
 function signWechatPayMessage(message) {
   return crypto
@@ -60,6 +80,44 @@ async function requestWechatPay(method, urlPath, body = null) {
   const data = text ? parseJson(text, {}) : {}
   if (!response.ok) throw new Error(data.message || `微信支付查询失败(${response.status})`)
   return data
+}
+async function getWechatAccessToken() {
+  if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt) return cachedAccessToken
+  if (!CONFIG.appid || !CONFIG.secret) throw new Error('WECHAT_SECRET未配置，无法获取微信access_token')
+  const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${CONFIG.appid}&secret=${CONFIG.secret}`
+  const response = await fetch(url)
+  const data = await response.json()
+  if (!response.ok || !data.access_token) {
+    throw new Error(data.errmsg || `获取微信access_token失败(${response.status})`)
+  }
+  cachedAccessToken = data.access_token
+  cachedAccessTokenExpiresAt = Date.now() + Math.max(60, Number(data.expires_in || 7200) - 300) * 1000
+  return cachedAccessToken
+}
+async function sendSubscribeMessage(params) {
+  try {
+    return await cloud.openapi.subscribeMessage.send(params)
+  } catch (error) {
+    const errMsg = String(error && (error.errMsg || error.message) || '')
+    if (!/access_token|INVALID_WX_ACCESS_TOKEN|invalid wx openapi access_token/i.test(errMsg)) throw error
+    const accessToken = await getWechatAccessToken()
+    const response = await fetch(`https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${accessToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        touser: params.touser,
+        template_id: params.templateId,
+        page: params.page,
+        data: params.data,
+        miniprogram_state: 'formal'
+      })
+    })
+    const result = await response.json()
+    if (!response.ok || result.errcode) {
+      throw new Error(result.errmsg || `订阅消息发送失败(${response.status})`)
+    }
+    return result
+  }
 }
 function decryptResource(resource = {}) {
   if (!CONFIG.apiV3Key) throw new Error('APIv3密钥未配置')
@@ -95,24 +153,26 @@ async function sendOrderNotice(order = {}) {
       .limit(100)
       .get()
     if (!subscriptions || !subscriptions.length) return
-    const address = parseJson(order.address, {})
-    const customer = order.buyerName || address.receiver || order.receiver || '用户'
     const amount = Number(order.payable || order.amount || 0)
-    const timeText = (order.paidAt || order.createdAt || now()).replace('T', ' ').slice(0, 16)
     const data = {
-      thing1: { value: '收到新订单' },
-      character_string2: { value: String(order.id || order.orderNo || '-').slice(0, 32) },
-      amount3: { value: `${amount.toFixed(2)}元` },
-      thing4: { value: String(customer).slice(0, 20) },
-      time5: { value: timeText }
+      date4: { value: noticeTimeText(order.paidAt || order.createdAt) },
+      thing5: { value: orderProductNames(order) },
+      thing7: { value: orderAddressText(order) },
+      amount12: { value: `¥${amount.toFixed(2)}` },
+      thing26: { value: truncateNoticeValue(order.note || '请及时处理订单', 20) }
     }
     for (const item of subscriptions) {
       try {
-        await cloud.openapi.subscribeMessage.send({
+        await sendSubscribeMessage({
           touser: item.openid,
           templateId,
           page: `pages/admin/order-detail/index?id=${order.id || order.orderNo || ''}`,
           data
+        })
+        console.log('[paymentNotify.subscribeMessage] sent:', {
+          openid: item.openid,
+          templateId,
+          orderId: order.id || order.orderNo || ''
         })
       } catch (error) {
         console.error('[paymentNotify.subscribeMessage] failed:', error)

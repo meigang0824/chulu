@@ -8,17 +8,10 @@
       </view>
       <view v-else class="hero__inner">
         <view class="hero__content">
-          <view class="hero__tag">{{ heroContent.tag }}</view>
-          <view class="hero__title">
-            {{ heroContent.title }}
-            <text>{{ heroContent.subtitle }}</text>
-          </view>
-          <view class="hero__features">
-            <view v-for="item in heroFeatures" :key="item">{{ item }}</view>
-          </view>
+          <view class="hero__tag">今日推荐</view>
         </view>
 
-        <view class="hero__media" @tap="goBanner(currentBanner)">
+        <view class="hero__media">
           <swiper
             class="hero__swiper"
             :autoplay="bannerSettings.autoplay"
@@ -29,7 +22,7 @@
             @change="handleBannerChange"
           >
             <swiper-item v-for="banner in activeBanners" :key="banner.id">
-              <view class="hero__slide">
+              <view class="hero__slide" @tap="goBanner(banner)">
                 <image class="hero__image" :src="banner.image" mode="aspectFill" lazy-load />
               </view>
             </swiper-item>
@@ -46,50 +39,76 @@
       </view>
     </view>
 
-    <view class="home-section card">
-      <view class="section__head">
-        <view class="section__title-wrap">
-          <view class="section__title">
-            <text class="section__icon">🔥</text>
-            <text>今日开团</text>
+    <view class="home-section">
+      <view class="group-section__head">
+        <view class="group-section__main">
+          <view class="group-section__title-row">
+            <view class="section__title group-section__title">
+              <text class="section__icon">🔥</text>
+              <text>今日开团</text>
+            </view>
+            <view class="group-section__meta">
+              <text>{{ groupSubtitle }}</text>
+            </view>
           </view>
-          <view class="section__subtitle">{{ groupSubtitle }}</view>
         </view>
-        <view class="section__actions">
-          <view class="section__badge">{{ groupBadge }}</view>
-          <view class="section__more" @tap="goCategory">查看更多 〉</view>
-        </view>
+        <view class="section__more group-section__more" @tap="goCategory">查看更多 〉</view>
       </view>
-      <view v-if="loading" class="product-list-scroll product-grid--loading">
-        <view v-for="index in 3" :key="index" class="product-list-loading-item">
+      <view v-if="loading" class="group-list">
+        <view v-for="index in 2" :key="index" class="group-card card group-card--loading">
           <SkeletonBlock variant="list" :rows="4" />
         </view>
       </view>
       <EmptyState
-        v-else-if="!featuredProducts.length"
+        v-else-if="!groupSections.length"
         title="今日开团暂未上新"
         desc="店长正在准备中，稍后回来看看会更热闹。"
       />
-      <scroll-view v-else class="product-list-scroll" scroll-x show-scrollbar="false">
-        <view class="product-strip">
-          <ProductCard
-            v-for="item in featuredProducts"
-            :key="item.id"
-            class="home-product-card"
-            :product="item"
-            variant="home-grid"
-            action-text="去参团"
-            :show-deadline="true"
-            :show-desc="false"
-            @tap="goDetail"
-            @join="goDetail"
-          />
-          <view class="product-more-card" @tap="goCategory">
-            <view>查看更多</view>
-            <text>全部商品</text>
+      <view v-else class="group-list">
+        <view v-for="group in groupSections" :key="group.id" class="group-card card">
+          <view class="group-card__head">
+            <view class="group-card__copy">
+              <view class="group-card__title">{{ group.title }}</view>
+              <view class="group-card__subtitle">
+                <text>{{ group.productCount }} 款商品</text>
+                <text>{{ group.participantCount }} 人跟团</text>
+              </view>
+            </view>
+            <view class="group-card__actions">
+              <button
+                class="group-card__share"
+                open-type="share"
+                :data-group-id="group.id"
+                :data-group-title="group.title"
+              >
+                <AppIcon name="wechat" :size="28" color="#18BF61" />
+                <text>分享</text>
+              </button>
+              <view class="section__more group-card__more" @tap="goCategory(group)">去跟团 〉</view>
+            </view>
           </view>
+          <scroll-view class="product-list-scroll" scroll-x show-scrollbar="false">
+            <view class="product-strip">
+              <ProductCard
+                v-for="item in group.products"
+                :key="item.id"
+                class="home-product-card"
+                :product="item"
+                variant="home-grid"
+                action-text="去跟团"
+                :show-deadline="false"
+                :show-desc="false"
+                @tap="goDetail"
+                @join="goDetail"
+              />
+              <view class="product-more-card" @tap="goCategory(group)">
+                <view>查看更多</view>
+                <text>本团商品</text>
+              </view>
+            </view>
+          </scroll-view>
         </view>
-      </scroll-view>
+      </view>
     </view>
 
     <view class="activity card">
@@ -137,17 +156,21 @@ import ProductCard from '@/components/ProductCard/ProductCard.vue'
 import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
 import BuyerTabBar from '@/components/BuyerTabBar/BuyerTabBar.vue'
+import AppIcon from '@/components/AppIcon/AppIcon.vue'
 import { getActiveBanners, getBannerConfig } from '@/utils/bannerConfig'
 import { getHomeData, getShopConfig, shouldAutoEnterAdmin } from '@/services/dataService'
+import { cloudImageHttpsUrl, IMAGE_ASSETS } from '@/utils/image'
 
 export default {
-  components: { CustomNavBar, ProductCard, EmptyState, SkeletonBlock, BuyerTabBar },
+  components: { CustomNavBar, ProductCard, EmptyState, SkeletonBlock, BuyerTabBar, AppIcon },
   data() {
     return {
       products: [],
+      groups: [],
       activities: [],
       activeProductCount: 0,
-      currentGroupDeadline: '',
+      currentGroupId: '',
+      currentGroupTitle: '',
       loading: true,
       bannerConfig: getBannerConfig(),
       bannerIndex: 0,
@@ -158,11 +181,22 @@ export default {
     featuredProducts() {
       return this.products
     },
-    groupSubtitle() {
-      return this.activeProductCount ? `${this.activeProductCount} 款商品正在团购` : '新鲜出炉，限时团购'
+    groupSections() {
+      return (this.groups || []).map((group, index) => {
+        const products = Array.isArray(group.products) ? group.products : []
+        return {
+          ...group,
+          id: group.id || group._id || `group_${index}`,
+          title: group.title || group.name || `团购 ${index + 1}`,
+          products,
+          productCount: Number(group.productCount || products.length || 0),
+          participantCount: Number(group.participantCount || 0)
+        }
+      }).filter(group => group.productCount > 0)
     },
-    groupBadge() {
-      return this.currentGroupDeadline || '限时截单'
+    groupSubtitle() {
+      if (this.groupSections.length) return `${this.groupSections.length} 个团正在进行 · ${this.activeProductCount} 款商品`
+      return '新鲜出炉，限时团购'
     },
     activeBanners() {
       return getActiveBanners(this.bannerConfig)
@@ -172,35 +206,42 @@ export default {
     },
     bannerSettings() {
       return this.bannerConfig.settings
-    },
-    heroContent() {
-      const banner = this.currentBanner || {}
-      return {
-        tag: banner.tag || '新鲜烘焙 · 团购更划算',
-        title: banner.title || '每日新鲜烘焙',
-        subtitle: banner.highlight || banner.subtitle || '一起团 更甜蜜'
-      }
-    },
-    heroFeatures() {
-      const features = this.currentBanner && this.currentBanner.features
-      return Array.isArray(features) && features.length ? features.slice(0, 4) : ['严选食材', '新鲜现做', '明日配送']
     }
   },
   onShow() {
     this.checkAdminPortal()
-    this.loading = true
+    const hasVisibleData = this.products.length || this.groups.length || this.activities.length
+    this.loading = !hasVisibleData
     this.bannerConfig = getBannerConfig()
     if (this.bannerIndex >= this.activeBanners.length) this.bannerIndex = 0
-    this.loadHomeData()
+    this.loadHomeData({ silent: hasVisibleData })
     this.loadShop()
   },
-  onShareAppMessage() {
+  onShareAppMessage(options = {}) {
+    const dataset = options.target && options.target.dataset ? options.target.dataset : {}
+    const groupId = dataset.groupId || this.currentGroupId
+    const groupTitle = dataset.groupTitle || this.currentGroupTitle
+    if (groupId) {
+      return {
+        title: groupTitle ? `${groupTitle} · 初炉新鲜烘焙` : '初炉今日团购 · 一起买更划算',
+        path: `/pages/category/index?groupId=${groupId}`,
+        imageUrl: this.shareCoverImage()
+      }
+    }
     return {
       title: '初炉新鲜烘焙 · 每日新鲜出炉',
-      path: '/pages/home/index'
+      path: '/pages/home/index',
+      imageUrl: this.shareCoverImage()
     }
   },
   methods: {
+    shareCoverImage() {
+      const product = (this.products && this.products[0]) || {}
+      const banner = this.currentBanner || {}
+      const image = product.bannerImage || product.image || banner.image || banner.imageFileID || ''
+      if (String(image).startsWith('cloud://')) return cloudImageHttpsUrl(image) || image
+      return image || cloudImageHttpsUrl(IMAGE_ASSETS.banner)
+    },
     async checkAdminPortal() {
       try {
         const shouldEnter = await shouldAutoEnterAdmin()
@@ -216,14 +257,17 @@ export default {
         this.shop = this.shop || {}
       }
     },
-    async loadHomeData() {
-      this.loading = true
+    async loadHomeData(options = {}) {
+      const silent = options.silent === true
+      if (!silent) this.loading = true
       try {
         const data = await getHomeData()
         this.products = data.products || []
+        this.groups = data.groups || []
         this.activities = data.activities || []
         this.activeProductCount = data.activeProductCount !== undefined ? data.activeProductCount : this.products.length
-        this.currentGroupDeadline = data.groupDeadline || ''
+        this.currentGroupId = data.groupId || ''
+        this.currentGroupTitle = data.groupTitle || ''
         if (data.banners && data.bannerSettings) {
           this.bannerConfig = {
             settings: data.bannerSettings,
@@ -231,10 +275,14 @@ export default {
           }
         }
       } catch {
-        this.products = []
-        this.activities = []
-        this.activeProductCount = 0
-        this.currentGroupDeadline = ''
+        if (!silent) {
+          this.products = []
+          this.groups = []
+          this.activities = []
+          this.activeProductCount = 0
+          this.currentGroupId = ''
+          this.currentGroupTitle = ''
+        }
       } finally {
         this.loading = false
       }
@@ -248,6 +296,9 @@ export default {
       }
     },
     goDetail(product) {
+      if (product && product.id) {
+        uni.setStorageSync(`buyer_product_context_${product.id}`, product)
+      }
       uni.navigateTo({ url: `/pages/product/detail?id=${product.id}` })
     },
     handleBannerChange(event) {
@@ -257,13 +308,30 @@ export default {
       this.bannerIndex = index
     },
     goBanner(banner) {
-      if (!banner.route) return
-      uni.navigateTo({ url: banner.route })
+      const route = banner && banner.route
+      if (!route) {
+        uni.removeStorageSync('buyer_selected_group_id')
+        uni.switchTab({ url: '/pages/category/index' })
+        return
+      }
+      if (route.indexOf('/pages/category/index') === 0 || route.indexOf('pages/category/index') === 0) {
+        uni.removeStorageSync('buyer_selected_group_id')
+        uni.switchTab({ url: '/pages/category/index' })
+        return
+      }
+      uni.navigateTo({ url: route })
     },
     goSearch() {
+      uni.removeStorageSync('buyer_selected_group_id')
       uni.switchTab({ url: '/pages/category/index' })
     },
-    goCategory() {
+    goCategory(group = null) {
+      const groupId = group && (group.id || group._id || group.groupId)
+      if (groupId) {
+        uni.setStorageSync('buyer_selected_group_id', groupId)
+      } else {
+        uni.removeStorageSync('buyer_selected_group_id')
+      }
       uni.switchTab({ url: '/pages/category/index' })
     },
     showAllActivity() {
@@ -297,9 +365,9 @@ export default {
   left: 0;
   top: 0;
   z-index: 2;
-  width: 68%;
+  width: 46%;
   height: 100%;
-  background: linear-gradient(90deg, rgba(75, 36, 23, 0.68) 0%, rgba(75, 36, 23, 0.36) 58%, rgba(75, 36, 23, 0) 100%);
+  background: linear-gradient(90deg, rgba(75, 36, 23, 0.48) 0%, rgba(75, 36, 23, 0.18) 60%, rgba(75, 36, 23, 0) 100%);
   pointer-events: none;
 }
 
@@ -314,12 +382,14 @@ export default {
 }
 
 .hero__content {
-  position: relative;
+  position: absolute;
+  left: 0;
+  top: 0;
   z-index: 3;
   box-sizing: border-box;
-  width: 54%;
-  height: 100%;
-  padding: 38rpx 26rpx 30rpx 30rpx;
+  width: 100%;
+  padding: 28rpx 30rpx;
+  pointer-events: none;
 }
 
 .hero__tag {
@@ -327,68 +397,18 @@ export default {
   align-items: center;
   max-width: 100%;
   box-sizing: border-box;
-  height: 40rpx;
-  padding: 0 18rpx;
+  height: 46rpx;
+  padding: 0 20rpx;
   color: #fff;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1rpx solid rgba(255, 255, 255, 0.26);
+  background: rgba(75, 36, 23, 0.42);
+  border: 1rpx solid rgba(255, 255, 255, 0.38);
   border-radius: $radius-pill;
   @include font-base;
-  font-size: 20rpx;
+  font-size: 22rpx;
   font-weight: $font-weight-semibold;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.hero__title {
-  margin-top: 18rpx;
-  @include text-display;
-  color: #fff;
-  font-size: 34rpx;
-  line-height: 1.18;
-  font-weight: $font-weight-heavy;
-  word-break: break-all;
-}
-
-.hero__title text {
-  display: block;
-  margin-top: 10rpx;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 28rpx;
-  line-height: 1.18;
-  @include text-ellipsis;
-}
-
-.hero__features {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0;
-  margin-top: 16rpx;
-  padding: 8rpx 6rpx;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1rpx solid rgba(255, 255, 255, 0.24);
-  border-radius: $radius-pill;
-}
-
-.hero__features view {
-  @include flex-center;
-  flex: 1;
-  min-width: 0;
-  height: 34rpx;
-  padding: 0 6rpx;
-  color: #fff;
-  font-size: 18rpx;
-  font-weight: $font-weight-medium;
-  line-height: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hero__features view + view {
-  margin-left: 0;
-  border-left: 1rpx solid rgba(255, 255, 255, 0.26);
 }
 
 .hero__media {
@@ -444,17 +464,52 @@ export default {
 
 .home-section {
   margin-top: 20rpx;
-  padding: 28rpx 18rpx 26rpx;
-  background: $color-card;
+  padding: 0;
+  background: transparent;
+}
+
+.section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.group-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  padding: 0 6rpx;
+  margin-bottom: 16rpx;
+}
+
+.group-section__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-section__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
 }
 
 .section__title {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 10rpx;
   @include text-page-title;
   font-size: 34rpx;
   font-weight: $font-weight-heavy;
+}
+
+.group-section__title {
+  align-items: center;
+  font-size: 32rpx;
+  line-height: 1;
 }
 
 .section__icon {
@@ -467,15 +522,135 @@ export default {
   line-height: 1;
 }
 
-.section__title-wrap {
+.group-section__meta {
   display: flex;
-  align-items: baseline;
-  gap: 14rpx;
+  align-items: center;
+  gap: 6rpx;
+  flex: 0 1 auto;
+  min-width: 0;
+  color: $color-text-light;
+  font-size: 22rpx;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.group-section__meta > text:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.section__more {
+  flex-shrink: 0;
+  color: $color-text-light;
+  font-size: 24rpx;
+  white-space: nowrap;
+}
+
+.group-section__more {
+  display: flex;
+  align-items: center;
+  height: 42rpx;
+  color: $color-text-regular;
+  font-size: 22rpx;
+}
+
+.group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.group-card {
+  padding: 22rpx 18rpx 18rpx;
+  background: $color-card;
+  overflow: hidden;
+}
+
+.group-card--loading {
+  min-height: 220rpx;
+}
+
+.group-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.group-card__copy {
+  flex: 1;
   min-width: 0;
 }
 
-.section__badge {
+.group-card__title {
+  color: $color-text-main;
+  font-size: 30rpx;
+  line-height: 1.25;
+  font-weight: $font-weight-heavy;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-card__subtitle {
   display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 8rpx;
+  color: $color-text-light;
+  font-size: 22rpx;
+  line-height: 1.2;
+}
+
+.group-card__subtitle text + text {
+  color: $color-text-regular;
+  font-weight: $font-weight-semibold;
+}
+
+.group-card__actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.group-card__share {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  width: 118rpx;
+  height: 42rpx;
+  margin: 0;
+  padding: 0;
+  color: #18BF61;
+  background: #fff;
+  border: 1rpx solid rgba(24, 191, 97, 0.35);
+  border-radius: $radius-pill;
+  font-size: 22rpx;
+  font-weight: $font-weight-semibold;
+  line-height: 42rpx;
+}
+
+.group-card__share::after {
+  border: 0;
+}
+
+.group-card__more {
+  display: flex;
+  align-items: center;
+  height: 42rpx;
+  padding: 0 14rpx;
+  color: $color-primary;
+  background: $color-primary-light;
+  border-radius: $radius-pill;
+  font-size: 22rpx;
+  font-weight: $font-weight-semibold;
+}
+
+.section__badge {
+  display: inline-flex;
   align-items: center;
   height: 46rpx;
   padding: 0 18rpx;
@@ -488,24 +663,15 @@ export default {
   font-weight: $font-weight-semibold;
 }
 
-.section__actions {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  flex-shrink: 0;
-}
-
-.section__more {
-  color: $color-text-light;
-  font-size: 24rpx;
-  white-space: nowrap;
-}
-
 .section__subtitle {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
   @include text-body($font-weight-regular, $color-text-light);
   font-size: 22rpx;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .product-list-scroll {
@@ -516,21 +682,23 @@ export default {
 
 .product-strip {
   display: inline-flex;
-  gap: 16rpx;
-  padding: 0 2rpx 4rpx;
+  gap: 14rpx;
+  padding: 0 2rpx 6rpx;
 }
 
 .home-product-card {
   flex: 0 0 auto;
-  width: 216rpx;
+  width: 214rpx;
+  border-radius: 18rpx;
+  box-shadow: 0 8rpx 22rpx rgba(94, 58, 43, 0.08);
 }
 
 .home-product-card ::v-deep .product-card__image {
-  height: 156rpx;
+  height: 150rpx;
 }
 
 .home-product-card ::v-deep .product-card__body {
-  padding: 10rpx 10rpx 12rpx;
+  padding: 12rpx 10rpx 12rpx;
 }
 
 .home-product-card ::v-deep .product-card__name {
@@ -549,7 +717,7 @@ export default {
 }
 
 .home-product-card ::v-deep .product-card__price-row {
-  margin-top: 4rpx;
+  margin-top: 6rpx;
 }
 
 .home-product-card ::v-deep .product-card__price {
@@ -562,40 +730,20 @@ export default {
 }
 
 .home-product-card ::v-deep .product-card__meta {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0;
-  margin-top: 2rpx;
-  font-size: 16rpx;
-  line-height: 1.2;
-}
-
-.home-product-card ::v-deep .product-card__meta text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.home-product-card ::v-deep .product-card__deadline {
-  height: 34rpx;
-  min-height: 34rpx;
-  margin-top: 6rpx;
-  padding: 0 6rpx;
-  font-size: 15rpx;
+  display: none;
 }
 
 .home-product-card ::v-deep .product-card__btn {
-  height: 46rpx;
-  margin-top: 6rpx;
-  font-size: 20rpx;
+  height: 48rpx;
+  margin-top: 8rpx;
+  font-size: 21rpx;
+  box-shadow: 0 8rpx 18rpx rgba(255, 92, 114, 0.18);
 }
 
 .product-more-card {
   flex: 0 0 auto;
   width: 150rpx;
-  min-height: 312rpx;
+  min-height: 292rpx;
   display: flex;
   align-items: center;
   justify-content: center;

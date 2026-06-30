@@ -22,9 +22,9 @@
       </view>
     </view>
 
-    <view class="line-card" @tap="pickDeliveryTime">
+    <view class="line-card line-card--readonly">
       <view>配送时间</view>
-      <text>{{ checkoutText.deliveryTime }} 〉</text>
+      <text>{{ checkoutText.deliveryTime }}</text>
     </view>
     <view class="line-card" @tap="editNote">
       <view>订单备注</view>
@@ -40,6 +40,7 @@
         <text>配送费</text>
         <text>￥{{ money(amount.deliveryFee) }}</text>
       </view>
+      <view v-if="minimumOrderTip" class="fee__tip">{{ minimumOrderTip }}</view>
       <view class="fee__row">
         <text>团购优惠</text>
         <text class="minus">-￥{{ money(amount.discount) }}</text>
@@ -57,7 +58,7 @@
         <view>实付款：<text>￥{{ money(amount.payable) }}</text></view>
         <view>{{ addressReady ? `已优惠 ￥${money(amount.discount)}` : '请先选择收货地址' }}</view>
       </view>
-      <button :class="{ 'is-disabled': !addressReady }" @tap="pay">{{ addressReady ? checkoutText.payText : '选择地址后下单' }}</button>
+      <button :class="{ 'is-disabled': !addressReady || !orderAmountReady }" @tap="pay">{{ payButtonText }}</button>
     </view>
   </view>
 </template>
@@ -88,26 +89,48 @@ export default {
   },
   computed: {
     amount() {
-      return calcOrderAmount(this.orderItems, this.checkout.deliveryFee, this.checkout.groupDiscount)
+      return calcOrderAmount(this.orderItems, this.checkout.deliveryFee, this.checkout.groupDiscount, this.minimumOrderAmount)
     },
     productTotal() {
       return money(this.amount.productAmount)
     },
     checkoutText() {
       return {
-        deliveryTime: this.cleanText(this.checkout.deliveryTime, '次日打包发货'),
+        deliveryTime: this.deliveryTimeText,
         notePlaceholder: this.cleanText(this.checkout.notePlaceholder, '口味、偏好或建议等(选填)'),
         serviceText: this.cleanText(this.checkout.serviceText, ''),
         payText: this.cleanText(this.checkout.payText, '微信支付')
       }
     },
+    deliveryTimeText() {
+      const itemTime = (this.orderItems || [])
+        .map(item => this.cleanText(item.deliveryTime || item.deliveryText || '', ''))
+        .find(Boolean)
+      return this.cleanText(itemTime || this.checkout.deliveryTime, '次日打包发货')
+    },
     stepperMax() {
       if (Number(this.product && this.product.stock) <= 0) return 0
       const limit = Number(this.product && this.product.limit)
-      return limit > 1 ? limit : 99
+      return limit > 0 ? limit : 99
     },
     addressReady() {
       return Boolean(this.address && this.address.receiver && this.address.address)
+    },
+    minimumOrderAmount() {
+      return Number(this.checkout.minimumOrderAmount || this.checkout.freeShippingAmount || 0)
+    },
+    orderAmountReady() {
+      return !this.minimumOrderAmount || Number(this.amount.productAmount || 0) >= this.minimumOrderAmount
+    },
+    minimumOrderTip() {
+      if (!this.minimumOrderAmount) return ''
+      if (this.orderAmountReady) return `已满 ￥${this.money(this.minimumOrderAmount)}，可下单发货`
+      return `满 ￥${this.money(this.minimumOrderAmount)} 起下单，还差 ￥${this.money(this.amount.minimumOrderMissing)}`
+    },
+    payButtonText() {
+      if (!this.addressReady) return '选择地址后下单'
+      if (!this.orderAmountReady) return `满￥${this.money(this.minimumOrderAmount)}起下单`
+      return this.checkoutText.payText
     }
   },
   async onLoad(query) {
@@ -116,7 +139,15 @@ export default {
       this.fromCart = true
       this.orderItems = getCheckoutItems()
     } else if (query.id) {
-      this.product = await getProductById(query.id)
+      const product = await getProductById(query.id)
+      const context = uni.getStorageSync(`buyer_product_context_${query.id}`) || {}
+      this.product = product ? {
+        ...product,
+        ...context,
+        id: product.id || context.id,
+        _id: product._id || context._id,
+        productId: product.productId || context.productId || product.id
+      } : null
       if (query.count) this.count = Number(query.count)
       this.normalizeCount()
       if (this.product) {
@@ -128,7 +159,10 @@ export default {
           price: this.product.price,
           image: this.product.imageFileID || this.product.image,
           stock: this.product.stock,
-          limit: this.stepperMax
+          limit: this.stepperMax,
+          groupId: this.product.groupId || '',
+          groupName: this.product.groupName || '',
+          deliveryTime: this.product.deliveryTime || ''
         }]
       }
     }
@@ -166,18 +200,6 @@ export default {
     itemTotal(item) {
       const total = Number(item.price || 0) * Number(item.count || 0)
       return money(total)
-    },
-    pickDeliveryTime() {
-      const options = ['明日配送', '后天配送', '门店自提（明日）']
-      uni.showActionSheet({
-        itemList: options,
-        success: ({ tapIndex }) => {
-          this.checkout = {
-            ...this.checkout,
-            deliveryTime: options[tapIndex] || this.checkoutText.deliveryTime
-          }
-        }
-      })
     },
     editNote() {
       uni.showModal({
@@ -225,21 +247,29 @@ export default {
         uni.showToast({ title: '请选择收货地址', icon: 'none' })
         return
       }
+      if (!this.orderAmountReady) {
+        uni.showToast({ title: `满￥${this.money(this.minimumOrderAmount)}起下单`, icon: 'none' })
+        return
+      }
       try {
         uni.showLoading({ title: '提交中' })
         const result = await createOrder({
           items: this.orderItems.map(item => ({
             productId: item.productId || item.id,
+            groupId: item.groupId || '',
             count: item.count,
             name: item.name,
             price: item.price,
-            image: item.imageFileID || item.image
+            image: item.imageFileID || item.image,
+            deliveryTime: item.deliveryTime || ''
           })),
           address: this.address,
           note: this.orderNote,
           deliveryTime: this.checkoutText.deliveryTime,
           productAmount: this.amount.productAmount,
           deliveryFee: this.amount.deliveryFee,
+          minimumOrderAmount: this.amount.minimumOrderAmount,
+          freeShippingAmount: this.amount.minimumOrderAmount,
           discount: this.amount.discount,
           payable: this.amount.payable,
           amount: this.amount.payable,
@@ -385,11 +415,23 @@ export default {
   @include text-body;
 }
 
+.line-card--readonly {
+  pointer-events: none;
+}
+
 .fee__row {
   display: flex;
   justify-content: space-between;
   margin-bottom: 24rpx;
   @include text-body($font-weight-regular, $color-text-main);
+}
+
+.fee__tip {
+  margin: -10rpx 0 24rpx;
+  color: $color-primary;
+  font-size: 24rpx;
+  line-height: 1.35;
+  text-align: right;
 }
 
 .minus {

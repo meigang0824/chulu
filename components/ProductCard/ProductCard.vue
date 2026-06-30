@@ -12,6 +12,7 @@
           <text>已售 {{ product.sold || 0 }} 份</text>
           <text v-if="showStock">仅剩 {{ product.stock || 0 }} 份</text>
           <text v-else-if="product.totalStock">库存 {{ product.totalStock }} 份</text>
+          <text v-if="variant === 'category-row' && product.deadline">{{ deadlineText }}</text>
         </view>
         <!-- home-list variant: price + button in footer row -->
         <view v-if="variant === 'home-list'" class="product-card__footer-row">
@@ -25,14 +26,29 @@
         </view>
         <!-- other variants: inline price row -->
         <view v-else class="product-card__price-row">
-          <text class="product-card__price">￥{{ money(product.price) }}</text>
-          <text v-if="product.originPrice" class="product-card__origin">￥{{ money(product.originPrice) }}</text>
+          <view class="product-card__price-main">
+            <text class="product-card__price">￥{{ money(product.price) }}</text>
+            <text v-if="product.originPrice" class="product-card__origin">￥{{ money(product.originPrice) }}</text>
+          </view>
+          <view v-if="showCartStepper" class="product-card__cart" @tap.stop="noop">
+            <view
+              class="product-card__cart-btn product-card__cart-btn--minus"
+              :class="{ 'is-disabled': Number(cartCount || 0) <= 0 }"
+              @tap.stop="handleCartDecrease"
+            >−</view>
+            <view class="product-card__cart-count">{{ cartCount || 0 }}</view>
+            <view
+              class="product-card__cart-btn product-card__cart-btn--plus"
+              :class="{ 'is-disabled': Number(cartCount || 0) >= Number(cartMax || 0) || Number(cartMax || 0) <= 0 }"
+              @tap.stop="handleCartIncrease"
+            >+</view>
+          </view>
         </view>
       </view>
 
       <slot name="extra" :product="product"></slot>
 
-      <view v-if="showDeadline" class="product-card__footer">
+      <view v-if="showDeadline && variant !== 'category-row'" class="product-card__footer">
         <view v-if="showDeadline && product.deadline" class="product-card__deadline">
           <text class="product-card__clock">○</text>
           <text>{{ deadlineText }}</text>
@@ -53,12 +69,15 @@ export default {
   props: {
     product: { type: Object, default: () => ({}) },
     variant: { type: String, default: 'home-grid' },
-    actionText: { type: String, default: '去参团' },
+    actionText: { type: String, default: '去跟团' },
     showAction: { type: Boolean, default: true },
     showDeadline: { type: Boolean, default: true },
     showStock: { type: Boolean, default: true },
     showMeta: { type: Boolean, default: true },
-    showDesc: { type: Boolean, default: false }
+    showDesc: { type: Boolean, default: false },
+    showCartStepper: { type: Boolean, default: false },
+    cartCount: { type: [Number, String], default: 0 },
+    cartMax: { type: [Number, String], default: 99 }
   },
   computed: {
     deadlineText() {
@@ -73,6 +92,14 @@ export default {
     },
     handleAction() {
       this.$emit('join', this.product)
+    },
+    handleCartIncrease() {
+      this.$emit('cart-increase', this.product)
+    },
+    handleCartDecrease() {
+      this.$emit('cart-decrease', this.product)
+    },
+    noop() {
     }
   }
 }
@@ -122,7 +149,14 @@ export default {
 .product-card__price-row {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
+  gap: 14rpx;
   margin-top: 10rpx;
+}
+
+.product-card__price-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .product-card__price {
@@ -226,6 +260,50 @@ export default {
   @include font-base;
   font-size: 28rpx;
   font-weight: $font-weight-semibold;
+}
+
+.product-card__cart {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.product-card__cart-btn {
+  @include flex-center;
+  width: 52rpx;
+  height: 52rpx;
+  color: $color-primary;
+  background: #fff;
+  border: 1rpx solid rgba(255, 92, 114, 0.26);
+  border-radius: 50%;
+  box-shadow: 0 8rpx 18rpx rgba(255, 92, 114, 0.1);
+  font-size: 34rpx;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.product-card__cart-btn--plus {
+  color: #fff;
+  background: $gradient-primary;
+  border-color: transparent;
+  box-shadow: $shadow-btn;
+}
+
+.product-card__cart-btn.is-disabled {
+  color: $color-text-placeholder;
+  background: $color-bg-deep;
+  border-color: $color-border-light;
+  box-shadow: none;
+}
+
+.product-card__cart-count {
+  min-width: 34rpx;
+  color: $color-text-main;
+  font-size: 28rpx;
+  font-weight: 800;
+  text-align: center;
 }
 
 .product-card--home-grid .product-card__image {
@@ -408,7 +486,14 @@ export default {
 }
 
 .product-card--category-row .product-card__price-row {
+  align-items: center;
   margin-top: 8rpx;
+}
+
+.product-card--category-row .product-card__price-main {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
 }
 
 .product-card--category-row .product-card__price {
@@ -439,6 +524,21 @@ export default {
 .product-card--category-row .product-card__clock {
   margin-right: 4rpx;
   font-size: 18rpx;
+}
+
+.product-card--category-row .product-card__cart {
+  gap: 10rpx;
+}
+
+.product-card--category-row .product-card__cart-btn {
+  width: 48rpx;
+  height: 48rpx;
+  font-size: 30rpx;
+}
+
+.product-card--category-row .product-card__cart-count {
+  min-width: 32rpx;
+  font-size: 26rpx;
 }
 
 /* home-list variant: 首页列表式布局 */

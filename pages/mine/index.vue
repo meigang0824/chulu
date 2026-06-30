@@ -7,26 +7,11 @@
         <image v-if="userAvatar" class="profile__avatar-img" :src="userAvatar" mode="aspectFill" />
         <text v-else>{{ profileAvatar }}</text>
       </view>
-      <view class="profile__info">
+      <view class="profile__info" @tap="handleNameTap">
         <view>{{ profileName }}</view>
-        <text>{{ identity.isGuest ? '登录后即可下单、管理地址和查看完整订单' : (identity.isLoggedIn ? '点击头像可更换头像' : '登录后可查看订单、地址和售后记录') }}</text>
+        <text>{{ identity.isGuest ? '登录后即可下单、管理地址和查看完整订单' : (identity.isLoggedIn ? '点击修改昵称，点头像更换头像' : '登录后可查看订单、地址和售后记录') }}</text>
       </view>
       <view class="profile__tag" :class="{ 'profile__tag--guest': identity.isGuest }" @tap="handleProfileAction">{{ identity.isGuest ? '登录/注册' : (identity.isLoggedIn ? shop.bakeryTag : '去登录') }}</view>
-    </view>
-
-    <view v-if="identity.isAdmin" class="mode-switch card">
-      <view class="mode-switch__main">
-        <view class="mode-switch__title">当前账号已开通店长权限</view>
-        <view class="mode-switch__desc">选择默认进入的页面端口，下次打开小程序会按这里的模式进入。</view>
-      </view>
-      <view class="mode-switch__actions">
-        <button class="mode-switch__btn" :class="{ 'mode-switch__btn--active': portalMode === 'buyer' }" @tap="switchPortal('buyer')">
-          用户端
-        </button>
-        <button class="mode-switch__btn" :class="{ 'mode-switch__btn--active': portalMode === 'admin' }" @tap="switchPortal('admin')">
-          店长端
-        </button>
-      </view>
     </view>
 
     <view class="order-entry card">
@@ -52,11 +37,25 @@
       </view>
     </view>
 
-    <view class="shop-info card">
-      <view class="shop-info__title">{{ shop.bakeryName }}</view>
-      <view>配送范围：{{ shop.deliveryRange }}</view>
-      <view>客服时间：{{ shop.customerService }}</view>
-      <view>门店地址：{{ shop.address }}</view>
+    <view v-if="nameDialogVisible" class="dialog-mask" @tap="closeNameDialog">
+      <view class="name-dialog" @tap.stop>
+        <view class="name-dialog__title">修改昵称</view>
+        <input
+          class="name-dialog__input"
+          v-model="nameDraft"
+          maxlength="16"
+          placeholder="请输入昵称"
+          confirm-type="done"
+          :focus="nameDialogVisible"
+          @confirm="saveProfileName"
+        />
+        <view class="name-dialog__actions">
+          <button class="name-dialog__btn name-dialog__btn--ghost" @tap="closeNameDialog">取消</button>
+          <button class="name-dialog__btn name-dialog__btn--primary" :disabled="savingName" @tap="saveProfileName">
+            {{ savingName ? '保存中' : '保存' }}
+          </button>
+        </view>
+      </view>
     </view>
     <BuyerTabBar active="mine" />
   </view>
@@ -66,7 +65,7 @@
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import AppIcon from '@/components/AppIcon/AppIcon.vue'
 import BuyerTabBar from '@/components/BuyerTabBar/BuyerTabBar.vue'
-import { getBuyerProfileSummary, getPortalMode, getShopConfig, getUserIdentity, setPortalMode } from '@/services/dataService'
+import { getBuyerProfileSummary, getShopConfig, getUserIdentity, setPortalMode } from '@/services/dataService'
 import { callFunction } from '@/services/apiClient'
 import { getAuthToken, logoutAuth, requireLogin, updateAuthSessionUser } from '@/utils/auth'
 import { resolveImageUrl, uploadImageToCloud } from '@/utils/image'
@@ -77,13 +76,15 @@ export default {
     return {
       shop: {},
       identity: { isLoggedIn: false, isGuest: false, isAdmin: false, role: 'guest', user: null },
-      portalMode: 'buyer',
       summary: {
         totalOrders: 0,
         pendingDelivery: 0,
         completed: 0
       },
       avatarDisplay: '',
+      nameDialogVisible: false,
+      nameDraft: '',
+      savingName: false,
       menus: [
         { icon: 'receipt', text: '我的订单', url: '/pages/order/list/index' },
         { icon: 'heart', text: '我的收藏', url: '/pages/favorite/index', type: 'navigateTo' },
@@ -101,7 +102,6 @@ export default {
     this.summary = summary
     this.shop = shopConfig
     this.identity = identity
-    this.portalMode = getPortalMode()
     await this.resolveUserAvatar()
   },
   computed: {
@@ -182,16 +182,44 @@ export default {
         uni.navigateTo({ url: '/pages/auth/login/index' })
       }
     },
-    switchPortal(mode) {
-      this.portalMode = setPortalMode(mode)
-      if (mode === 'admin') {
-        if (!this.identity.isAdmin) {
-          uni.navigateTo({ url: '/pages/auth/login/index?requiredRole=admin' })
-          return
-        }
-        uni.navigateTo({ url: '/pages/admin/dashboard/index' })
-      } else {
-        uni.switchTab({ url: '/pages/home/index' })
+    handleNameTap() {
+      if (!this.identity.isLoggedIn || this.identity.isGuest) {
+        uni.navigateTo({ url: '/pages/auth/login/index' })
+        return
+      }
+      this.nameDraft = this.profileName
+      this.nameDialogVisible = true
+    },
+    closeNameDialog() {
+      if (this.savingName) return
+      this.nameDialogVisible = false
+      this.nameDraft = ''
+    },
+    async saveProfileName() {
+      if (this.savingName) return
+      const displayName = String(this.nameDraft || '').trim()
+      if (!displayName) {
+        uni.showToast({ title: '请输入昵称', icon: 'none' })
+        return
+      }
+      try {
+        this.savingName = true
+        const avatarText = displayName.slice(0, 2)
+        const result = await callFunction('businessApi', {
+          action: 'updateProfile',
+          payload: { displayName, avatarText },
+          authToken: getAuthToken()
+        })
+        const user = result.user || { ...(this.identity.user || {}), displayName, avatarText }
+        updateAuthSessionUser(user)
+        this.identity = { ...this.identity, user }
+        this.nameDialogVisible = false
+        this.nameDraft = ''
+        uni.showToast({ title: '昵称已更新', icon: 'success' })
+      } catch (error) {
+        uni.showToast({ title: error.message || '昵称保存失败', icon: 'none' })
+      } finally {
+        this.savingName = false
       }
     },
     goOrders() {
@@ -215,7 +243,6 @@ export default {
           return
         }
         setPortalMode('admin')
-        this.portalMode = 'admin'
         uni.navigateTo({ url: '/pages/admin/dashboard/index' })
       } else if (item.url) {
         if (item.type === 'navigateTo') {
@@ -328,43 +355,6 @@ export default {
   text-align: center;
 }
 
-.mode-switch {
-  margin-top: 24rpx;
-  padding: 26rpx 28rpx;
-}
-
-.mode-switch__title {
-  @include text-card-title;
-  font-size: 30rpx;
-}
-
-.mode-switch__desc {
-  margin-top: 10rpx;
-  @include text-caption($color-text-regular);
-}
-
-.mode-switch__actions {
-  display: flex;
-  gap: 16rpx;
-  margin-top: 20rpx;
-}
-
-.mode-switch__btn {
-  flex: 1;
-  @include outline-button($color-text-main);
-  height: 76rpx;
-  font-size: 28rpx;
-}
-
-.mode-switch__btn--active {
-  color: #fff;
-  background: $gradient-primary;
-  border-color: transparent;
-  box-shadow: $shadow-btn;
-  border-color: transparent;
-  box-shadow: none;
-}
-
 .stats text {
   @include text-price(42rpx);
   font-weight: $font-weight-heavy;
@@ -375,8 +365,7 @@ export default {
   @include text-caption($color-text-regular);
 }
 
-.menu,
-.shop-info {
+.menu {
   margin-top: 24rpx;
   padding: 8rpx 28rpx;
 }
@@ -416,17 +405,67 @@ export default {
   color: $color-text-light;
 }
 
-.shop-info {
-  padding: 28rpx;
-  @include text-body($font-weight-regular, $color-text-regular);
-  font-size: 26rpx;
-  line-height: 1.6;
+.dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+  background: rgba(35, 20, 16, .34);
 }
 
-.shop-info__title {
-  margin-bottom: 12rpx;
+.name-dialog {
+  width: 100%;
+  padding: 34rpx 30rpx 30rpx;
+  background: #fff;
+  border-radius: 28rpx;
+  box-shadow: 0 24rpx 70rpx rgba(82, 48, 34, .18);
+}
+
+.name-dialog__title {
   @include text-card-title;
-  font-size: 32rpx;
-  font-weight: $font-weight-heavy;
+  text-align: center;
+  font-size: 34rpx;
+}
+
+.name-dialog__input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 92rpx;
+  margin-top: 28rpx;
+  padding: 0 26rpx;
+  color: $color-text-main;
+  background: $color-bg-light;
+  border: 1rpx solid $color-border-light;
+  border-radius: 18rpx;
+  font-size: 30rpx;
+}
+
+.name-dialog__actions {
+  display: flex;
+  gap: 18rpx;
+  margin-top: 28rpx;
+}
+
+.name-dialog__btn {
+  flex: 1;
+  height: 82rpx;
+  border-radius: $radius-pill;
+  font-size: 28rpx;
+  line-height: 82rpx;
+}
+
+.name-dialog__btn--ghost {
+  color: $color-text-regular;
+  background: #fff;
+  border: 1rpx solid $color-border;
+}
+
+.name-dialog__btn--primary {
+  color: #fff;
+  background: $gradient-primary;
+  box-shadow: $shadow-btn;
 }
 </style>

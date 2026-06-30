@@ -69,6 +69,7 @@ export const groupAPI = {
   list: (params = {}, authToken = '') => callBusinessApi('listGroups', params, authToken),
   get: (id, authToken = '') => callBusinessApi('getGroup', { id }, authToken),
   create: (data, authToken = '') => callBusinessApi('createGroup', data, authToken),
+  update: (id, data, authToken = '') => callBusinessApi('updateGroup', { id, ...data }, authToken),
   updateStatus: (id, status, authToken = '') => callBusinessApi('updateGroupStatus', { id, status }, authToken),
   delete: (id, authToken = '') => callBusinessApi('deleteGroup', { id }, authToken),
 }
@@ -95,6 +96,12 @@ export const shopAPI = {
 export const notificationAPI = {
   getAdminSubscriptionStatus: (authToken = '') => callBusinessApi('getAdminSubscriptionStatus', {}, authToken),
   saveAdminSubscription: (data = {}, authToken = '') => callBusinessApi('saveAdminSubscription', data, authToken),
+}
+
+// ==================== 权限 / 用户 ====================
+export const accountAPI = {
+  list: (authToken = '') => callBusinessApi('listAccounts', {}, authToken),
+  updateRole: (accountId, role, authToken = '') => callBusinessApi('updateAccountRole', { accountId, role }, authToken),
 }
 
 // ==================== 地址 ====================
