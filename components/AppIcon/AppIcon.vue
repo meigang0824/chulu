@@ -23,6 +23,8 @@ const iconMap = {
   chart: 'fire-filled',
   route: 'map-filled',
   banner: 'image-filled',
+  bell: 'sound-filled',
+  wechat: 'weixin',
   store: 'shop-filled',
   yuan: 'wallet-filled',
   logout: 'arrow-right',

@@ -44,8 +44,8 @@
           </view>
           <view class="product-card__desc">{{ item.desc || item.subtitle || '暂未填写商品描述' }}</view>
           <view class="product-card__meta">
-            <text>￥{{ item.price }}</text>
-            <text>原价 ￥{{ item.originPrice }}</text>
+            <text>￥{{ money(item.price) }}</text>
+            <text>原价 ￥{{ money(item.originPrice) }}</text>
             <text>库存 {{ item.stock }}</text>
             <text>已售 {{ item.sold }}</text>
           </view>
@@ -79,6 +79,7 @@ import AdminTabBar from '@/components/AdminTabBar/AdminTabBar.vue'
 import { getAdminProducts, updateProductStatus, deleteProduct, getShopConfig } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar, StatusTag, EmptyState, SkeletonBlock, AdminTabBar },
@@ -126,6 +127,7 @@ export default {
     await this.loadProducts()
   },
   methods: {
+    money,
     async loadProducts() {
       this.loading = true
       try {

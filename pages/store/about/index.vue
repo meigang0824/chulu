@@ -27,12 +27,6 @@
       </view>
     </view>
 
-    <view class="card section">
-      <view class="section__title">门店说明</view>
-      <view class="notice">{{ shop.notice }}</view>
-      <view v-for="(item, index) in shop.operationTips" :key="index" class="tip">{{ index + 1 }}. {{ item }}</view>
-    </view>
-
     <view class="bottom-actions">
       <button class="ghost-btn" @tap="copyAddress">复制地址</button>
       <button class="primary-btn" @tap="callStore">联系门店</button>
@@ -80,7 +74,7 @@ export default {
 .info-row { display:flex; justify-content:space-between; gap:24rpx; padding-top:18rpx; color:$color-text-regular; font-size:26rpx; }
 .info-row text { flex-shrink:0; color:$color-text-main; }
 .info-row view { min-width:0; text-align:right; line-height:1.5; }
-.assurance,.notice,.tip { margin-top:18rpx; color:$color-text-regular; font-size:26rpx; line-height:1.6; }
+.assurance { margin-top:18rpx; color:$color-text-regular; font-size:26rpx; line-height:1.6; }
 .badge-list { display:flex; flex-wrap:wrap; gap:14rpx; margin-top:20rpx; }
 .badge { padding:12rpx 18rpx; color:$color-text-main; background:$color-primary-pale; border:1rpx solid $color-border-light; border-radius:$radius-pill; font-size:24rpx; font-weight:600; }
 .bottom-actions { position:fixed; left:0; right:0; bottom:0; display:flex; gap:20rpx; padding:18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background:rgba(255, 253, 249, .98); border-top:1rpx solid $color-border-light; box-shadow:$shadow-footer; }

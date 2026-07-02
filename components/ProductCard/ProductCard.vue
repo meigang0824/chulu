@@ -1,5 +1,15 @@
 <template>
-  <view class="product-card" :class="'product-card--' + variant" @tap="handleTap">
+  <view class="product-card" :class="['product-card--' + variant, { 'product-card--with-share': showShare }]" @tap="handleTap">
+    <button
+      v-if="showShare"
+      class="product-card__share"
+      open-type="share"
+      :data-product-id="shareProductId"
+      :data-product-name="product.name"
+      @tap.stop="noop"
+    >
+      <AppIcon name="wechat" :size="24" color="#FF5C72" />
+    </button>
     <view class="product-card__image-wrap">
       <image class="product-card__image" :src="product.image" mode="aspectFill" lazy-load />
     </view>
@@ -12,12 +22,13 @@
           <text>已售 {{ product.sold || 0 }} 份</text>
           <text v-if="showStock">仅剩 {{ product.stock || 0 }} 份</text>
           <text v-else-if="product.totalStock">库存 {{ product.totalStock }} 份</text>
+          <text v-if="variant === 'category-row' && deadlineText">{{ deadlineText }}</text>
         </view>
         <!-- home-list variant: price + button in footer row -->
         <view v-if="variant === 'home-list'" class="product-card__footer-row">
           <view class="product-card__price-block">
-            <text class="product-card__price">￥{{ product.price }}</text>
-            <text v-if="product.originPrice" class="product-card__origin">￥{{ product.originPrice }}</text>
+            <text class="product-card__price">￥{{ money(product.price) }}</text>
+            <text v-if="product.originPrice" class="product-card__origin">￥{{ money(product.originPrice) }}</text>
           </view>
           <button v-if="showAction" class="product-card__btn product-card__btn--sm" @tap.stop="handleAction">
             {{ actionText }}
@@ -25,15 +36,37 @@
         </view>
         <!-- other variants: inline price row -->
         <view v-else class="product-card__price-row">
-          <text class="product-card__price">￥{{ product.price }}</text>
-          <text v-if="product.originPrice" class="product-card__origin">￥{{ product.originPrice }}</text>
+          <view class="product-card__price-main">
+            <text class="product-card__price">￥{{ money(product.price) }}</text>
+            <text v-if="product.originPrice" class="product-card__origin">￥{{ money(product.originPrice) }}</text>
+          </view>
+          <view v-if="showCartStepper" class="product-card__cart" @tap.stop="noop">
+            <view
+              class="product-card__cart-btn product-card__cart-btn--minus"
+              :class="{ 'is-disabled': Number(cartCount || 0) <= 0 }"
+              @tap.stop="handleCartDecrease"
+            >−</view>
+            <view class="product-card__cart-count">{{ cartCount || 0 }}</view>
+            <view
+              class="product-card__cart-btn product-card__cart-btn--plus"
+              :class="{ 'is-disabled': Number(cartCount || 0) >= Number(cartMax || 0) || Number(cartMax || 0) <= 0 }"
+              @tap.stop="handleCartIncrease"
+            >+</view>
+          </view>
+          <button
+            v-else-if="variant === 'category-row' && showAction"
+            class="product-card__btn product-card__btn--inline"
+            @tap.stop="handleAction"
+          >
+            {{ actionText }}
+          </button>
         </view>
       </view>
 
       <slot name="extra" :product="product"></slot>
 
-      <view v-if="showDeadline" class="product-card__footer">
-        <view v-if="showDeadline && product.deadline" class="product-card__deadline">
+      <view v-if="showDeadline && variant !== 'category-row'" class="product-card__footer">
+        <view v-if="showDeadline && deadlineText" class="product-card__deadline">
           <text class="product-card__clock">○</text>
           <text>{{ deadlineText }}</text>
         </view>
@@ -46,30 +79,51 @@
 </template>
 
 <script>
+import AppIcon from '@/components/AppIcon/AppIcon.vue'
+import { formatDeadlineText, money } from '@/utils/format'
+
 export default {
   name: 'ProductCard',
+  components: { AppIcon },
   props: {
     product: { type: Object, default: () => ({}) },
     variant: { type: String, default: 'home-grid' },
-    actionText: { type: String, default: '去参团' },
+    actionText: { type: String, default: '去跟团' },
     showAction: { type: Boolean, default: true },
     showDeadline: { type: Boolean, default: true },
     showStock: { type: Boolean, default: true },
     showMeta: { type: Boolean, default: true },
-    showDesc: { type: Boolean, default: false }
+    showDesc: { type: Boolean, default: false },
+    showShare: { type: Boolean, default: false },
+    showCartStepper: { type: Boolean, default: false },
+    cartCount: { type: [Number, String], default: 0 },
+    cartMax: { type: [Number, String], default: 99 }
   },
   computed: {
+    shareProductId() {
+      return this.product.productId || this.product.id || this.product._id || ''
+    },
     deadlineText() {
-      if (this.variant === 'home-grid') return String(this.product.deadline || '').replace('今晚', '').replace('截单', '截')
-      return this.product.deadline
+      const text = formatDeadlineText(this.product.deadlineAt, this.product.deadline || '')
+      if (this.variant === 'home-grid') return String(text).replace('今晚', '').replace('今日', '').replace('截单', '截').trim()
+      return text
     }
   },
   methods: {
+    money,
     handleTap() {
       this.$emit('tap', this.product)
     },
     handleAction() {
       this.$emit('join', this.product)
+    },
+    handleCartIncrease() {
+      this.$emit('cart-increase', this.product)
+    },
+    handleCartDecrease() {
+      this.$emit('cart-decrease', this.product)
+    },
+    noop() {
     }
   }
 }
@@ -79,11 +133,38 @@ export default {
 @import '@/common/theme.scss';
 
 .product-card {
+  position: relative;
   overflow: hidden;
   background: $color-card;
   border-radius: $radius-card;
   border: 1rpx solid $color-border-light;
   box-shadow: $shadow-card;
+}
+
+.product-card__share {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48rpx;
+  height: 48rpx;
+  margin: 0;
+  padding: 0;
+  color: $color-primary;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1rpx solid rgba(255, 92, 114, 0.18);
+  border-radius: 50%;
+  font-size: 22rpx;
+  font-weight: $font-weight-semibold;
+  line-height: 48rpx;
+  box-shadow: 0 8rpx 18rpx rgba(255, 92, 114, 0.08);
+}
+
+.product-card__share::after {
+  border: 0;
 }
 
 .product-card__image-wrap {
@@ -119,7 +200,14 @@ export default {
 .product-card__price-row {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
+  gap: 14rpx;
   margin-top: 10rpx;
+}
+
+.product-card__price-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .product-card__price {
@@ -223,6 +311,50 @@ export default {
   @include font-base;
   font-size: 28rpx;
   font-weight: $font-weight-semibold;
+}
+
+.product-card__cart {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.product-card__cart-btn {
+  @include flex-center;
+  width: 52rpx;
+  height: 52rpx;
+  color: $color-primary;
+  background: #fff;
+  border: 1rpx solid rgba(255, 92, 114, 0.26);
+  border-radius: 50%;
+  box-shadow: 0 8rpx 18rpx rgba(255, 92, 114, 0.1);
+  font-size: 34rpx;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.product-card__cart-btn--plus {
+  color: #fff;
+  background: $gradient-primary;
+  border-color: transparent;
+  box-shadow: $shadow-btn;
+}
+
+.product-card__cart-btn.is-disabled {
+  color: $color-text-placeholder;
+  background: $color-bg-deep;
+  border-color: $color-border-light;
+  box-shadow: none;
+}
+
+.product-card__cart-count {
+  min-width: 34rpx;
+  color: $color-text-main;
+  font-size: 28rpx;
+  font-weight: 800;
+  text-align: center;
 }
 
 .product-card--home-grid .product-card__image {
@@ -354,15 +486,23 @@ export default {
   align-self: stretch;
 }
 
+.product-card--category-row .product-card__btn--inline {
+  flex-shrink: 0;
+  align-self: auto;
+  min-width: 156rpx;
+  width: auto;
+  padding: 0 22rpx;
+}
+
 .product-card--category-row {
   display: flex;
   align-items: stretch;
-  padding: 20rpx 18rpx;
+  padding: 18rpx 16rpx;
 }
 
 .product-card--category-row .product-card__image-wrap {
   flex-shrink: 0;
-  width: 168rpx;
+  width: 156rpx;
   align-self: stretch;
   border-radius: 22rpx;
 }
@@ -378,12 +518,18 @@ export default {
   justify-content: space-between;
   flex: 1;
   min-width: 0;
-  min-height: 168rpx;
-  padding: 2rpx 0 2rpx 20rpx;
+  min-height: 156rpx;
+  padding: 0 0 0 18rpx;
 }
 
 .product-card--category-row .product-card__main {
   min-width: 0;
+}
+
+.product-card--category-row.product-card--with-share .product-card__name,
+.product-card--category-row.product-card--with-share .product-card__desc,
+.product-card--category-row.product-card--with-share .product-card__meta {
+  padding-right: 58rpx;
 }
 
 .product-card--category-row .product-card__footer {
@@ -395,21 +541,34 @@ export default {
 }
 
 .product-card--category-row .product-card__name {
-  font-size: 30rpx;
+  font-size: 28rpx;
   line-height: 1.22;
 }
 
 .product-card--category-row .product-card__desc {
-  margin-top: 6rpx;
+  margin-top: 4rpx;
   font-size: 22rpx;
+  @include multi-ellipsis(1);
 }
 
 .product-card--category-row .product-card__price-row {
-  margin-top: 8rpx;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6rpx;
+}
+
+.product-card--category-row .product-card__price-main {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.product-card--category-row .product-card__cart {
+  margin-left: auto;
 }
 
 .product-card--category-row .product-card__price {
-  font-size: 34rpx;
+  font-size: 32rpx;
 }
 
 .product-card--category-row .product-card__origin {
@@ -417,9 +576,9 @@ export default {
 }
 
 .product-card--category-row .product-card__meta {
-  margin-top: 8rpx;
+  margin-top: 6rpx;
   font-size: 20rpx;
-  line-height: 1.3;
+  line-height: 1.2;
 }
 
 .product-card--category-row .product-card__deadline {
@@ -436,6 +595,21 @@ export default {
 .product-card--category-row .product-card__clock {
   margin-right: 4rpx;
   font-size: 18rpx;
+}
+
+.product-card--category-row .product-card__cart {
+  gap: 10rpx;
+}
+
+.product-card--category-row .product-card__cart-btn {
+  width: 48rpx;
+  height: 48rpx;
+  font-size: 30rpx;
+}
+
+.product-card--category-row .product-card__cart-count {
+  min-width: 32rpx;
+  font-size: 26rpx;
 }
 
 /* home-list variant: 首页列表式布局 */

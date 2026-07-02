@@ -25,14 +25,7 @@
               <image class="preview__image" :src="banner.image" mode="aspectFill" />
             </view>
             <view class="preview__copy">
-              <view class="preview__tag">{{ banner.tag || '新鲜烘焙 · 团购更划算' }}</view>
-              <view class="preview__text">
-                {{ banner.title || '每日新鲜烘焙' }}
-                <text>{{ banner.highlight || banner.subtitle || '一起团 更甜蜜' }}</text>
-              </view>
-              <view class="preview__features">
-                <view v-for="item in previewFeatures(banner)" :key="item">{{ item }}</view>
-              </view>
+              <view class="preview__tag">今日推荐</view>
             </view>
           </view>
         </swiper-item>
@@ -85,29 +78,13 @@
       <view class="banner-card__top">
         <image :src="banner.image" mode="aspectFill" />
         <view class="banner-card__main">
-          <view class="banner-card__title">{{ banner.title || '未命名轮播' }}</view>
+          <view class="banner-card__title">轮播图 {{ index + 1 }}</view>
           <view class="banner-card__meta">排序 {{ banner.sort }} · {{ banner.enabled ? '已启用' : '已停用' }}</view>
         </view>
         <switch :checked="banner.enabled" color="#e84f5f" @change="setBanner(index, 'enabled', $event.detail.value)" />
       </view>
 
       <view class="edit-grid">
-        <label>
-          <text>主标题</text>
-          <input :value="banner.title" @input="setBanner(index, 'title', $event.detail.value)" />
-        </label>
-        <label>
-          <text>副标题</text>
-          <input :value="banner.highlight" @input="setBanner(index, 'highlight', $event.detail.value)" />
-        </label>
-        <label>
-          <text>角标</text>
-          <input :value="banner.tag" @input="setBanner(index, 'tag', $event.detail.value)" />
-        </label>
-        <label>
-          <text>卖点，逗号分隔</text>
-          <input :value="banner.features.join('，')" @input="setFeatures(index, $event.detail.value)" />
-        </label>
         <label>
           <text>点击跳转</text>
           <picker :range="routeOptions" range-key="label" :value="routeIndex(banner.route)" @change="setRoute(index, $event)">
@@ -135,21 +112,19 @@
       <button class="secondary-btn" @tap="reset">恢复默认</button>
       <button class="primary-btn" @tap="save">保存配置</button>
     </view>
-    <AdminTabBar active="dashboard" />
   </view>
 </template>
 
 <script>
-import AdminTabBar from '@/components/AdminTabBar/AdminTabBar.vue'
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import { getActiveBanners, getDefaultBannerConfig, saveBannerConfig } from '@/utils/bannerConfig'
 import { IMAGE_OPTIONS, resolveImageUrl, uploadImageToCloud } from '@/utils/image'
-import { adminAction, getAdminProducts, getDisplayBannerConfigFromCloud } from '@/services/dataService'
+import { adminAction, getActiveGroups, getAdminProducts, getDisplayBannerConfigFromCloud } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
 
 export default {
-  components: { AdminTabBar, CustomNavBar },
+  components: { CustomNavBar },
   data() {
     const config = getDefaultBannerConfig()
     return {
@@ -170,10 +145,6 @@ export default {
     }
   },
   methods: {
-    previewFeatures(banner) {
-      const features = banner && banner.features
-      return Array.isArray(features) && features.length ? features.slice(0, 4) : ['严选食材', '新鲜现做', '明日配送']
-    },
     handlePreviewChange(event) {
       this.previewIndex = event.detail.current || 0
     },
@@ -187,14 +158,6 @@ export default {
     setBanner(index, key, value) {
       this.$set(this.banners[index], key, value)
       if (this.previewIndex >= this.activeBanners.length) this.previewIndex = 0
-    },
-    setFeatures(index, value) {
-      const features = String(value || '')
-        .split(/[，,]/)
-        .map(item => item.trim())
-        .filter(Boolean)
-        .slice(0, 4)
-      this.$set(this.banners[index], 'features', features)
     },
     setRoute(index, event) {
       const option = this.routeOptions[Number(event.detail.value || 0)]
@@ -222,7 +185,7 @@ export default {
           uni.showLoading({ title: '上传中' })
           try {
             const fileID = await uploadImageToCloud(filePath, 'banners')
-            this.addImageOption(fileID)
+            this.addImageOption(fileID, `自定义图片 ${index + 1}`)
             this.setBanner(index, 'imageFileID', fileID)
             this.setBanner(index, 'image', await resolveImageUrl(fileID, fileID))
           } catch (error) {
@@ -248,7 +211,7 @@ export default {
     },
     imageLabel(value) {
       const item = this.imageOptions.find(option => option.value === value)
-      return item ? item.label : '选择图片'
+      return item ? item.label : '自定义图片'
     },
     routeIndex(value) {
       return Math.max(this.routeOptions.findIndex(item => item.value === value), 0)
@@ -260,6 +223,7 @@ export default {
     async applyBannerConfig(config) {
       const banners = await Promise.all((config.banners || []).map(async item => {
         const imageFileID = item.imageFileID || item.image
+        this.addImageOption(imageFileID, item.label || `轮播图 ${item.sort || ''}`.trim() || '当前图片')
         return {
           ...item,
           imageFileID,
@@ -278,7 +242,20 @@ export default {
       uni.showToast({ title: '已恢复默认', icon: 'none' })
     },
     async save() {
-      const payload = { settings: this.settings, banners: this.banners }
+      const payload = {
+        settings: this.settings,
+        banners: this.banners.map(item => {
+          const { _id, createdAt, updatedAt, ...banner } = item || {}
+          return {
+            ...banner,
+            title: '',
+            highlight: '',
+            subtitle: '',
+            tag: '',
+            features: []
+          }
+        })
+      }
       try {
         uni.showLoading({ title: '保存中' })
         const saved = await adminAction('saveBannerConfig', payload)
@@ -292,7 +269,7 @@ export default {
       }
     },
     async loadBannerConfig() {
-      const config = await getDisplayBannerConfigFromCloud()
+      const config = await getDisplayBannerConfigFromCloud(true)
       await this.applyBannerConfig(config)
     }
   },
@@ -309,9 +286,16 @@ export default {
   },
   async onShow() {
     try {
-      const products = await getAdminProducts()
+      const [products, groups] = await Promise.all([
+        getAdminProducts(),
+        getActiveGroups().catch(() => [])
+      ])
       this.routeOptions = [
         { label: '不跳转', value: '' },
+        ...groups.map(item => ({
+          label: `团购：${item.title || item.name || '未命名团购'}`,
+          value: `/pages/category/index?groupId=${item.id || item._id || item.groupId}`
+        })),
         ...products.map(item => ({ label: item.name, value: `/pages/product/detail?id=${item.id}` }))
       ]
     } catch {
@@ -324,7 +308,7 @@ export default {
 <style lang="scss" scoped>
 @import '@/common/theme.scss';
 
-.banner-page { padding-bottom: 230rpx; }
+.banner-page { padding-bottom: 150rpx; }
 .preview { margin-top: 20rpx; padding: 24rpx; }
 .preview__head { @include flex-between; margin-bottom: 20rpx; }
 .preview__title { color: $color-text-main; font-size: 34rpx; font-weight: 800; }
@@ -337,11 +321,6 @@ export default {
 .preview__image { display: block; width: 100%; height: 100%; }
 .preview__copy { position: relative; z-index: 3; box-sizing: border-box; width: 54%; height: 100%; padding: 38rpx 26rpx 30rpx 30rpx; }
 .preview__tag { display: inline-flex; align-items: center; max-width: 100%; box-sizing: border-box; height: 40rpx; padding: 0 18rpx; color: #fff; background: rgba(255,255,255,.18); border: 1rpx solid rgba(255,255,255,.26); border-radius: $radius-pill; font-size: 20rpx; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.preview__text { margin-top: 18rpx; color: #fff; font-size: 34rpx; line-height: 1.18; font-weight: 900; word-break: break-all; }
-.preview__text text { display: block; margin-top: 10rpx; color: rgba(255,255,255,.92); font-size: 28rpx; line-height: 1.18; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.preview__features { display: flex; flex-wrap: nowrap; gap: 0; margin-top: 16rpx; padding: 8rpx 6rpx; background: rgba(255,255,255,.16); border: 1rpx solid rgba(255,255,255,.24); border-radius: $radius-pill; }
-.preview__features view { display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; height: 34rpx; padding: 0 6rpx; color: #fff; font-size: 18rpx; font-weight: 600; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.preview__features view + view { border-left: 1rpx solid rgba(255,255,255,.26); }
 .preview__dots { position: relative; z-index: 4; display: flex; justify-content: center; gap: 12rpx; height: 0; transform: translateY(-28rpx); }
 .preview__dots text { width: 22rpx; height: 8rpx; background: rgba(255,255,255,.9); border-radius: $radius-pill; transition: width .2s ease, background .2s ease; }
 .preview__dots text.is-active { width: 32rpx; background: $color-primary; }
@@ -362,7 +341,7 @@ input, .picker-text { min-height: 76rpx; padding: 0 18rpx; color: $color-text-ma
 .edit-grid { display: grid; grid-template-columns: 1fr; gap: 18rpx; margin-top: 24rpx; }
 .banner-card__actions { display: flex; gap: 18rpx; margin-top: 22rpx; }
 .banner-card__actions button { flex: 1; }
-.bottom-actions { position: fixed; left: 0; right: 0; bottom: calc(142rpx + env(safe-area-inset-bottom)); z-index: 41; display: flex; gap: 18rpx; padding: 18rpx 24rpx; background: rgba(255,253,249,.98); border-top: 1rpx solid $color-border-light; }
+.bottom-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; display: flex; gap: 18rpx; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255,253,249,.98); border-top: 1rpx solid $color-border-light; }
 .bottom-actions button { flex: 1; }
 button[disabled] { opacity: .45; }
 </style>

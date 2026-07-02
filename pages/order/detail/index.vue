@@ -26,17 +26,17 @@
           <image class="goods-item__image" :src="item.image" mode="aspectFill" lazy-load />
           <view class="goods-item__info">
             <view class="goods-item__name">{{ item.name }}</view>
-            <text>￥{{ item.price }} × {{ item.count }}</text>
+            <text>￥{{ money(item.price) }} × {{ item.count }}</text>
           </view>
           <view class="goods-item__amount">￥{{ itemAmount(item) }}</view>
         </view>
       </view>
 
       <view class="amount-card card">
-        <view class="amount-row"><text>商品金额</text><view>￥{{ order.productAmount || itemTotal }}</view></view>
-        <view class="amount-row"><text>配送费</text><view>￥{{ order.deliveryFee || 0 }}</view></view>
-        <view class="amount-row"><text>优惠</text><view>-￥{{ order.discount || 0 }}</view></view>
-        <view class="amount-total"><text>实付款</text><view>￥{{ order.payable || order.amount }}</view></view>
+        <view class="amount-row"><text>商品金额</text><view>￥{{ money(order.productAmount || itemTotal) }}</view></view>
+        <view class="amount-row"><text>配送费</text><view>￥{{ money(order.deliveryFee || 0) }}</view></view>
+        <view class="amount-row"><text>优惠</text><view>-￥{{ money(order.discount || 0) }}</view></view>
+        <view class="amount-total"><text>实付款</text><view>￥{{ money(order.payable || order.amount) }}</view></view>
       </view>
 
       <view class="info-card card">
@@ -49,6 +49,18 @@
         <view class="info-row"><text>支付方式</text><view>{{ order.payMethod }}</view></view>
         <view class="info-row"><text>配送时间</text><view>{{ order.deliveryText }}</view></view>
         <view v-if="noteText" class="info-row"><text>订单备注</text><view>{{ noteText }}</view></view>
+      </view>
+
+      <view v-if="refundNoticeVisible" class="refund-notice card">
+        <view class="refund-notice__head">
+          <view>{{ refundNoticeTitle }}</view>
+          <StatusTag type="refund" text="处理中" size="sm" plain />
+        </view>
+        <text>{{ refundNoticeText }}</text>
+        <view v-if="order.refundError" class="refund-notice__error">
+          <view>上次退款失败：{{ order.refundError }}</view>
+          <button @tap="copyRefundError">复制原因</button>
+        </view>
       </view>
 
       <view class="progress-card card">
@@ -93,13 +105,11 @@
     </template>
 
     <view v-if="!pageLoading && order.id" class="bottom-actions">
-      <button v-if="canCancel" class="action-btn action-btn--ghost" @tap="cancelOrder">取消订单</button>
-      <button v-if="['delivering', 'completed'].includes(order.status)" class="action-btn action-btn--ghost" @tap="viewLogistics">查看物流</button>
-      <button v-if="canRefund" class="action-btn action-btn--ghost" @tap="goRefund">{{ refundActionText }}</button>
       <button class="action-btn action-btn--ghost" @tap="contact">联系客服</button>
-      <button v-if="order.status === 'completed'" class="action-btn action-btn--ghost" @tap="buyAgain">再次购买</button>
-      <button v-if="order.status === 'completed'" class="action-btn action-btn--primary" @tap="goReview">去评价</button>
-      <button v-else class="action-btn action-btn--primary" @tap="buyAgain">再次购买</button>
+      <button v-if="moreActions.length" class="action-btn action-btn--ghost" @tap="showMoreActions">更多</button>
+      <button class="action-btn action-btn--primary" :class="{ 'action-btn--disabled': primaryAction.disabled }" @tap="handlePrimaryAction">
+        {{ primaryAction.text }}
+      </button>
     </view>
   </view>
 </template>
@@ -110,9 +120,10 @@ import AddressCard from '@/components/AddressCard/AddressCard.vue'
 import StatusTag from '@/components/StatusTag/StatusTag.vue'
 import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
 import EmptyState from '@/components/EmptyState/EmptyState.vue'
-import { cancelBuyerOrder, getBuyerOrderById, getShopConfig } from '@/services/dataService'
+import { cancelBuyerOrder, cancelRefundRequest, getBuyerOrderById, getShopConfig } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar, AddressCard, StatusTag, SkeletonBlock, EmptyState },
@@ -129,7 +140,7 @@ export default {
     },
     itemTotal() {
       const total = Number(this.mainItem.price || 0) * Number(this.mainItem.count || 0)
-      return total.toFixed(total % 1 === 0 ? 0 : 1)
+      return money(total)
     },
     renderItems() {
       return (this.order.items || []).map((item, index) => ({
@@ -154,13 +165,38 @@ export default {
       }
     },
     canCancel() {
-      return ['paid', 'pendingDelivery'].includes(this.order.status)
+      return ['paid', 'pendingDelivery'].includes(this.order.status) && this.order.refundStatus !== 'pending'
     },
     canRefund() {
       return ['delivering', 'completed'].includes(this.order.status)
     },
     refundActionText() {
       return this.order.refundStatus === 'pending' ? '退款处理中' : '申请退款'
+    },
+    refundNoticeVisible() {
+      return this.order.refundStatus === 'pending' || Boolean(this.order.refundError)
+    },
+    refundNoticeTitle() {
+      return this.order.refundType === 'cancelOrder' ? '取消申请待审核' : '售后申请待处理'
+    },
+    refundNoticeText() {
+      if (this.order.refundError) return '退款暂未成功，店长可以在售后管理中重试；处理前你仍可以撤回申请。'
+      return '店长处理前可以撤回申请，撤回后如仍需处理，可以重新提交。'
+    },
+    primaryAction() {
+      if (this.canCancel) return { text: '申请取消', action: 'cancel' }
+      if (this.order.status === 'delivering') return { text: '查看物流', action: 'logistics' }
+      if (this.order.refundStatus === 'pending') return { text: '撤回售后', action: 'cancelRefund' }
+      if (this.order.status === 'completed') return { text: '再次购买', action: 'buyAgain' }
+      if (this.order.status === 'cancelled') return { text: '再次购买', action: 'buyAgain' }
+      return { text: '再次购买', action: 'buyAgain' }
+    },
+    moreActions() {
+      const actions = []
+      if (this.canRefund && this.order.refundStatus !== 'pending') {
+        actions.push({ text: '申请退款', action: 'refund' })
+      }
+      return actions
     }
   },
   async onLoad(query) {
@@ -173,6 +209,7 @@ export default {
     this.pageLoading = false
   },
   methods: {
+    money,
     progressIcon(step, index) {
       if (step.done) return '✓'
       if (step.active) return String(index + 1)
@@ -180,17 +217,25 @@ export default {
     },
     itemAmount(item) {
       const total = Number(item.price || 0) * Number(item.count || 0)
-      return total.toFixed(total % 1 === 0 ? 0 : 1)
+      return money(total)
     },
     copyOrderId() {
       uni.setClipboardData({ data: this.order.detailId || this.order.id })
     },
+    copyRefundError() {
+      uni.setClipboardData({ data: this.order.refundError || '' })
+    },
     callDriver() {
-      uni.makePhoneCall({ phoneNumber: this.order.driverPhone || this.shop.phone })
+      const phone = String(this.order.driverPhone || this.shop.phone || '').replace(/[^\d]/g, '')
+      if (!phone) {
+        uni.showToast({ title: '暂无联系电话', icon: 'none' })
+        return
+      }
+      uni.makePhoneCall({ phoneNumber: phone })
     },
     viewLogistics() {
       const driver = this.order.driverName || '初炉配送员'
-      const phone = this.order.driverPhone || this.shop.phone || '暂无'
+      const phone = String(this.order.driverPhone || this.shop.phone || '').replace(/[^\d]/g, '') || '暂无'
       const deliveryTime = this.order.deliveryTime || this.order.deliveryText || '配送中'
       uni.showModal({
         title: '配送信息',
@@ -222,8 +267,24 @@ export default {
         }
       })
     },
-    goReview() {
-      uni.navigateTo({ url: `/pages/order/review/index?id=${this.order.id || this.order.detailId || ''}` })
+    handlePrimaryAction() {
+      const action = this.primaryAction.action
+      if (action === 'cancel') return this.cancelOrder()
+      if (action === 'logistics') return this.viewLogistics()
+      if (action === 'cancelRefund') return this.cancelRefund()
+      return this.buyAgain()
+    },
+    showMoreActions() {
+      const actions = this.moreActions
+      if (!actions.length) return
+      uni.showActionSheet({
+        itemList: actions.map(item => item.text),
+        success: res => {
+          const action = actions[res.tapIndex]
+          if (!action) return
+          if (action.action === 'refund') this.goRefund()
+        }
+      })
     },
     goRefund() {
       if (this.order.refundStatus === 'pending') {
@@ -244,16 +305,37 @@ export default {
     },
     cancelOrder() {
       uni.showModal({
-        title: '取消订单',
-        content: '确认取消该订单吗？取消后库存会自动回补。',
+        title: '申请取消订单',
+        content: '提交后需要店长审核，店长同意后会为你退款并取消订单。',
         success: async ({ confirm }) => {
           if (!confirm) return
           try {
-            uni.showLoading({ title: '取消中' })
+            uni.showLoading({ title: '提交中' })
             await cancelBuyerOrder(this.order.id)
             this.order = await getBuyerOrderById(this.order.id)
             uni.hideLoading()
-            uni.showToast({ title: '订单已取消', icon: 'success' })
+            uni.showToast({ title: '已提交申请', icon: 'success' })
+          } catch (error) {
+            uni.hideLoading()
+            showCloudError(error)
+          }
+        }
+      })
+    },
+    cancelRefund() {
+      uni.showModal({
+        title: '撤回售后',
+        content: '确认撤回当前售后申请吗？撤回后如仍需处理，可以重新提交申请。',
+        confirmText: '撤回',
+        confirmColor: '#ff5c72',
+        success: async ({ confirm }) => {
+          if (!confirm) return
+          try {
+            uni.showLoading({ title: '撤回中' })
+            await cancelRefundRequest(this.order.id)
+            this.order = await getBuyerOrderById(this.order.id)
+            uni.hideLoading()
+            uni.showToast({ title: '已撤回售后', icon: 'success' })
           } catch (error) {
             uni.hideLoading()
             showCloudError(error)
@@ -271,9 +353,9 @@ export default {
 .order-detail { min-height: 100vh; padding: 0 24rpx 190rpx; background: $gradient-page; }
 .skeleton-wrap .skeleton-card { padding: 24rpx; border-radius: $radius-card; margin-top: 20rpx; background: #fff; }
 
-.detail-card, .goods-card, .info-card, .amount-card, .progress-card { margin-top: 20rpx; }
+.detail-card, .goods-card, .info-card, .amount-card, .progress-card, .refund-notice { margin-top: 20rpx; }
 
-.goods-card, .info-card, .amount-card, .progress-card { padding: 28rpx; }
+.goods-card, .info-card, .amount-card, .progress-card, .refund-notice { padding: 28rpx; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; margin-bottom: 8rpx; }
 .goods-item { display: flex; align-items: center; gap: 18rpx; padding: 20rpx 0; border-bottom: 1rpx solid $color-border-light; }
 .goods-item:last-child { padding-bottom: 0; border-bottom: none; }
@@ -289,6 +371,57 @@ export default {
 .info-row text { flex-shrink: 0; color: $color-text-main; }
 .info-row view { min-width: 0; text-align: right; }
 .info-row button { display: inline-flex; align-items: center; justify-content: center; height: 42rpx; margin-left: 12rpx; padding: 0 14rpx; color: $color-orange; background: #fff; border: 1rpx solid $color-orange; border-radius: $radius-pill; font-size: 22rpx; }
+
+.refund-notice {
+  background: #fff7f8;
+  border: 1rpx solid rgba(255, 92, 114, 0.16);
+}
+
+.refund-notice__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.refund-notice__head view {
+  color: $color-text-main;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.refund-notice > text {
+  display: block;
+  margin-top: 12rpx;
+  color: $color-text-regular;
+  font-size: 25rpx;
+  line-height: 1.45;
+}
+
+.refund-notice__error {
+  margin-top: 16rpx;
+  padding: 16rpx;
+  color: $color-primary;
+  background: #fff;
+  border: 1rpx solid rgba(255, 92, 114, 0.18);
+  border-radius: 18rpx;
+  font-size: 24rpx;
+  line-height: 1.4;
+}
+
+.refund-notice__error button {
+  @include flex-center;
+  width: 150rpx;
+  height: 52rpx;
+  margin: 14rpx 0 0;
+  padding: 0;
+  color: $color-primary;
+  background: $color-primary-light;
+  border: 1rpx solid rgba(255, 92, 114, 0.18);
+  border-radius: $radius-pill;
+  font-size: 23rpx;
+  font-weight: 700;
+}
 
 .amount-row, .amount-total { display: flex; justify-content: space-between; gap: 24rpx; padding-top: 18rpx; color: $color-text-regular; font-size: 26rpx; line-height: 1.35; }
 .amount-row:first-child { padding-top: 0; }
@@ -324,13 +457,22 @@ export default {
 .assurance { display: flex; flex-wrap: wrap; gap: 12rpx; justify-content: space-between; margin-top: 20rpx; padding: 22rpx 28rpx; color: $color-text-main; background: $color-orange-light; border: 1rpx solid rgba(200, 121, 50, 0.18); border-radius: $radius-card; font-size: 26rpx; }
 .assurance text { color: $color-primary; font-weight: 700; }
 
-.bottom-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) 1.35fr; gap: 12rpx; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 253, 249, 0.98); border-top: 1rpx solid $color-border-light; box-shadow: $shadow-bottom; }
-.action-btn { @include flex-center; min-width: 0; height: 78rpx; margin: 0; padding: 0 10rpx; border-radius: $radius-pill; font-size: 24rpx; font-weight: 700; line-height: 1.2; }
-.action-btn--ghost { color: $color-text-main; background: #fff; border: 1rpx solid $color-border; }
-.action-btn--primary { color: #fff; background: $gradient-primary; border: none; box-shadow: $shadow-btn; }
-
-@media screen and (max-width: 430px) {
-  .bottom-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .action-btn--primary { grid-column: span 2; }
+.bottom-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
+  background: rgba(255, 253, 249, 0.98);
+  border-top: 1rpx solid $color-border-light;
+  box-shadow: $shadow-bottom;
 }
+.action-btn { @include flex-center; flex: 0 0 154rpx; min-width: 0; height: 76rpx; margin: 0; padding: 0 16rpx; border-radius: $radius-pill; font-size: 25rpx; font-weight: 700; line-height: 1.2; }
+.action-btn--ghost { color: $color-text-main; background: #fff; border: 1rpx solid $color-border; }
+.action-btn--primary { flex: 1; color: #fff; background: $gradient-primary; border: none; box-shadow: $shadow-btn; font-size: 28rpx; }
+.action-btn--disabled { opacity: .72; box-shadow: none; }
 </style>

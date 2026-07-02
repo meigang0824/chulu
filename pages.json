@@ -19,6 +19,12 @@
       }
     },
     {
+      "path": "pages/legal/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/category/index",
       "style": {
         "navigationStyle": "custom"
@@ -92,12 +98,6 @@
     },
     {
       "path": "pages/mine/index",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
-      "path": "pages/order/review/index",
       "style": {
         "navigationStyle": "custom"
       }
@@ -206,6 +206,12 @@
         },
         {
           "path": "category-manage/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "permission/index",
           "style": {
             "navigationStyle": "custom"
           }

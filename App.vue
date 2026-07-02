@@ -7,7 +7,7 @@ export default {
     // #ifdef MP-WEIXIN
     if (wx.cloud) {
       wx.cloud.init({
-        env: 'aiwork-8g5erw9d885e24b4',
+        env: 'cloudbase-d7gp8xx126047f577',
         traceUser: true
       })
     }

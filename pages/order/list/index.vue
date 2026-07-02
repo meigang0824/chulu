@@ -14,8 +14,35 @@
         </view>
       </view>
     </scroll-view>
+    <view v-if="isLoggedIn" class="time-filter card">
+      <scroll-view scroll-x class="time-scroll" show-scrollbar="false">
+        <view class="time-tabs">
+          <view
+            v-for="item in timeOptions"
+            :key="item.key"
+            class="time-tab"
+            :class="{ active: timeFilter === item.key }"
+            @tap="setTimeFilter(item.key)"
+          >{{ item.text }}</view>
+        </view>
+      </scroll-view>
+      <view v-if="timeFilter === 'custom'" class="date-range">
+        <picker mode="date" :value="startDate || today" @change="setStartDate">
+          <view class="date-picker">{{ startDate || '开始日期' }}</view>
+        </picker>
+        <view class="date-separator">至</view>
+        <picker mode="date" :value="endDate || today" @change="setEndDate">
+          <view class="date-picker">{{ endDate || '结束日期' }}</view>
+        </picker>
+      </view>
+    </view>
+    <view v-if="isLoggedIn" class="search-card card">
+      <text>⌕</text>
+      <input v-model.trim="keyword" placeholder="搜索订单号、商品、收货人或手机号" />
+      <text v-if="keyword" class="search-card__clear" @tap="keyword = ''">×</text>
+    </view>
     <view v-if="isLoggedIn && !loading" class="order-hint">
-      {{ active === 'all' ? `共 ${orders.length} 笔订单` : `当前筛选 ${filteredOrders.length} 笔订单` }}
+      {{ orderHintText }}
     </view>
     <view v-if="loading" class="order-skeleton">
       <view v-for="index in 3" :key="index" class="order-skeleton__card card">
@@ -31,8 +58,8 @@
     />
     <EmptyState
       v-else-if="!filteredOrders.length"
-      title="还没有相关订单"
-      desc="下单成功后，订单进度会在这里更新。"
+      :title="emptyTitle"
+      :desc="emptyDesc"
       action-text="去首页看看"
       @action="goHome"
     />
@@ -57,7 +84,7 @@ import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import BuyerTabBar from '@/components/BuyerTabBar/BuyerTabBar.vue'
 import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
 import { ensurePageAccess, isLoggedIn } from '@/utils/auth'
-import { cancelBuyerOrder, getBuyerOrders } from '@/services/dataService'
+import { cancelBuyerOrder, cancelRefundRequest, getBuyerOrders } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 
 export default {
@@ -65,6 +92,10 @@ export default {
   data() {
     return {
       orders: [],
+      keyword: '',
+      timeFilter: 'all',
+      startDate: '',
+      endDate: '',
       loading: true,
       active: 'all',
       isLoggedIn: false,
@@ -73,6 +104,14 @@ export default {
         { key: 'pendingDelivery', text: '待配送' },
         { key: 'delivering', text: '配送中' },
         { key: 'finished', text: '已结束' }
+      ],
+      timeOptions: [
+        { key: 'all', text: '全部时间' },
+        { key: 'today', text: '今天' },
+        { key: 'yesterday', text: '昨天' },
+        { key: 'last7', text: '近7天' },
+        { key: 'last30', text: '近30天' },
+        { key: 'custom', text: '自定义' }
       ],
       loadSeq: 0
     }
@@ -84,7 +123,7 @@ export default {
       this.loading = false
       return
     }
-    this.loadOrders()
+    this.loadOrders({ silent: this.orders.length > 0 })
   },
   onShareAppMessage() {
     return {
@@ -94,27 +133,72 @@ export default {
   },
   watch: {
     active() {
-      this.loadOrders()
+      this.loadOrders({ silent: this.orders.length > 0 })
     }
   },
   computed: {
+    today() {
+      return this.formatDate(new Date())
+    },
+    dateFilteredOrders() {
+      return this.orders.filter(item => this.matchTimeRange(item))
+    },
     filteredOrders() {
-      if (this.active === 'all') return this.orders
-      if (this.active === 'finished') return this.orders.filter(item => ['completed', 'cancelled'].includes(item.status))
-      return this.orders.filter(item => item.status === this.active)
+      const keyword = this.keyword.trim().toLowerCase()
+      let list = this.dateFilteredOrders
+      if (this.active === 'finished') {
+        list = list.filter(item => ['completed', 'cancelled'].includes(item.status))
+      } else if (this.active !== 'all') {
+        list = list.filter(item => item.status === this.active)
+      }
+      if (!keyword) return list
+      return list.filter(item => this.orderSearchText(item).includes(keyword))
+    },
+    orderHintText() {
+      if (this.keyword.trim()) return `找到 ${this.filteredOrders.length} 笔订单`
+      return this.active === 'all' ? `共 ${this.dateFilteredOrders.length} 笔订单` : `当前筛选 ${this.filteredOrders.length} 笔订单`
+    },
+    emptyTitle() {
+      return this.keyword.trim() ? '没有匹配订单' : '还没有相关订单'
+    },
+    emptyDesc() {
+      return this.keyword.trim() ? '换个订单号、商品名或手机号再试试。' : '下单成功后，订单进度会在这里更新。'
     }
   },
   methods: {
+    orderSearchText(order = {}) {
+      const items = Array.isArray(order.items) ? order.items : []
+      const values = [
+        order.id,
+        order.orderNo,
+        order.detailId,
+        order.customer,
+        order.receiver,
+        order.phone,
+        order.fullPhone,
+        order.address,
+        order.shortAddress,
+        order.statusText,
+        order.payStatusText,
+        order.deliveryText,
+        order.fulfillmentMethod,
+        order.amount,
+        order.payable,
+        ...items.flatMap(item => [item.name, item.productId, item.count, item.price])
+      ]
+      return values.filter(value => value !== undefined && value !== null).join(' ').toLowerCase()
+    },
     cardActionText(order) {
-      if (['paid', 'pendingDelivery'].includes(order.status)) return '取消订单'
-      if (order.refundStatus === 'pending') return '退款处理中'
+      if (order.refundStatus === 'pending') return '撤回售后'
+      if (['paid', 'pendingDelivery'].includes(order.status)) return '申请取消'
       if (order.status === 'delivering') return '查看物流'
       if (order.status === 'completed') return '申请退款'
       if (order.status === 'cancelled') return '再次购买'
       return '查看进度'
     },
-    async loadOrders() {
-      this.loading = true
+    async loadOrders(options = {}) {
+      const silent = options.silent === true
+      if (!silent) this.loading = true
       const seq = ++this.loadSeq
       const orders = await getBuyerOrders('all')
       if (seq !== this.loadSeq) return
@@ -126,9 +210,83 @@ export default {
       this.loading = false
     },
     getTabCount(key) {
-      if (key === 'all') return this.orders.length
-      if (key === 'finished') return this.orders.filter(item => ['completed', 'cancelled'].includes(item.status)).length
-      return this.orders.filter(item => item.status === key).length
+      if (key === 'all') return this.dateFilteredOrders.length
+      if (key === 'finished') return this.dateFilteredOrders.filter(item => ['completed', 'cancelled'].includes(item.status)).length
+      return this.dateFilteredOrders.filter(item => item.status === key).length
+    },
+    setTimeFilter(key) {
+      this.timeFilter = key
+      if (key !== 'custom') {
+        this.startDate = ''
+        this.endDate = ''
+      } else {
+        this.startDate = this.startDate || this.today
+        this.endDate = this.endDate || this.today
+      }
+      this.refreshTabCounts()
+    },
+    setStartDate(event) {
+      this.startDate = event.detail.value
+      if (this.endDate && this.startDate > this.endDate) this.endDate = this.startDate
+      this.refreshTabCounts()
+    },
+    setEndDate(event) {
+      this.endDate = event.detail.value
+      if (this.startDate && this.endDate < this.startDate) this.startDate = this.endDate
+      this.refreshTabCounts()
+    },
+    refreshTabCounts() {
+      this.tabs = this.tabs.map(tab => ({
+        ...tab,
+        count: this.getTabCount(tab.key)
+      }))
+    },
+    formatDate(date) {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    },
+    orderTime(order = {}) {
+      const raw = order.createdAt || order.createDateTime || order.createTime || order.payTime || ''
+      if (!raw) return 0
+      if (typeof raw === 'number') return raw < 10000000000 ? raw * 1000 : raw
+      const text = String(raw).trim()
+      if (/^\d+$/.test(text)) {
+        const value = Number(text)
+        return value < 10000000000 ? value * 1000 : value
+      }
+      const normalized = text.replace(/-/g, '/').replace('T', ' ').replace(/\.\d+Z?$/, '')
+      const time = new Date(normalized).getTime()
+      return Number.isNaN(time) ? 0 : time
+    },
+    dateStart(dateText) {
+      return new Date(`${dateText.replace(/-/g, '/')} 00:00:00`).getTime()
+    },
+    dateEnd(dateText) {
+      return new Date(`${dateText.replace(/-/g, '/')} 23:59:59`).getTime()
+    },
+    timeRange() {
+      const todayStart = this.dateStart(this.today)
+      const oneDay = 24 * 60 * 60 * 1000
+      if (this.timeFilter === 'today') return { start: todayStart, end: todayStart + oneDay - 1 }
+      if (this.timeFilter === 'yesterday') return { start: todayStart - oneDay, end: todayStart - 1 }
+      if (this.timeFilter === 'last7') return { start: todayStart - oneDay * 6, end: todayStart + oneDay - 1 }
+      if (this.timeFilter === 'last30') return { start: todayStart - oneDay * 29, end: todayStart + oneDay - 1 }
+      if (this.timeFilter === 'custom') {
+        return {
+          start: this.startDate ? this.dateStart(this.startDate) : 0,
+          end: this.endDate ? this.dateEnd(this.endDate) : Number.MAX_SAFE_INTEGER
+        }
+      }
+      return null
+    },
+    matchTimeRange(order) {
+      const range = this.timeRange()
+      if (!range) return true
+      const time = this.orderTime(order)
+      if (!time) return false
+      return time >= range.start && time <= range.end
     },
     viewOrder(order) {
       uni.navigateTo({ url: `/pages/order/detail/index?id=${order.id}` })
@@ -140,6 +298,10 @@ export default {
       uni.navigateTo({ url: '/pages/auth/login/index' })
     },
     handlePrimary(order) {
+      if (order.refundStatus === 'pending') {
+        this.cancelRefund(order)
+        return
+      }
       if (['paid', 'pendingDelivery'].includes(order.status)) {
         this.cancelOrder(order)
         return
@@ -147,10 +309,6 @@ export default {
       if (order.status === 'delivering') {
         // 配送中状态：查看物流
         this.viewLogistics(order)
-        return
-      }
-      if (order.refundStatus === 'pending') {
-        uni.showToast({ title: '退款申请处理中', icon: 'none' })
         return
       }
       if (order.status === 'completed') {
@@ -170,14 +328,14 @@ export default {
     },
     viewLogistics(order) {
       const driver = order.driverName || '初炉配送员'
-      const phone = order.driverPhone || order.shopPhone || '暂无'
+      const phone = String(order.driverPhone || order.shopPhone || '').replace(/[^\d]/g, '')
       const trackingNo = order.trackingNo || '暂无物流单号'
       uni.showModal({
         title: '物流信息',
-        content: `配送员：${driver}\n联系电话：${phone}\n物流单号：${trackingNo}\n当前状态：配送中`,
+        content: `配送员：${driver}\n联系电话：${phone || '暂无'}\n物流单号：${trackingNo}\n当前状态：配送中`,
         confirmText: '联系配送员',
         success: ({ confirm }) => {
-          if (confirm && phone && phone !== '暂无') {
+          if (confirm && phone) {
             uni.makePhoneCall({ phoneNumber: phone })
           }
         }
@@ -185,15 +343,36 @@ export default {
     },
     cancelOrder(order) {
       uni.showModal({
-        title: '取消订单',
-        content: '确认取消该订单吗？取消后库存会自动回补。',
+        title: '申请取消订单',
+        content: '提交后需要店长审核，店长同意后会为你退款并取消订单。',
         success: async ({ confirm }) => {
           if (!confirm) return
           try {
-            uni.showLoading({ title: '取消中' })
+            uni.showLoading({ title: '提交中' })
             await cancelBuyerOrder(order.id)
             uni.hideLoading()
-            uni.showToast({ title: '订单已取消', icon: 'success' })
+            uni.showToast({ title: '已提交申请', icon: 'success' })
+            this.loadOrders()
+          } catch (error) {
+            uni.hideLoading()
+            showCloudError(error)
+          }
+        }
+      })
+    },
+    cancelRefund(order) {
+      uni.showModal({
+        title: '撤回售后',
+        content: '确认撤回当前售后申请吗？撤回后如仍需处理，可以重新提交申请。',
+        confirmText: '撤回',
+        confirmColor: '#ff5c72',
+        success: async ({ confirm }) => {
+          if (!confirm) return
+          try {
+            uni.showLoading({ title: '撤回中' })
+            await cancelRefundRequest(order.id)
+            uni.hideLoading()
+            uni.showToast({ title: '已撤回售后', icon: 'success' })
             this.loadOrders()
           } catch (error) {
             uni.hideLoading()
@@ -249,6 +428,101 @@ export default {
   background: $color-primary-light;
   border-color: rgba(255,92,114,.20);
   font-weight: 800;
+}
+
+.time-filter {
+  margin-bottom: 20rpx;
+  padding: 16rpx 18rpx;
+  overflow: hidden;
+}
+
+.time-scroll {
+  width: 100%;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+.time-tabs {
+  display: inline-flex;
+  gap: 12rpx;
+  padding-right: 4rpx;
+}
+
+.time-tab {
+  @include flex-center;
+  flex: 0 0 auto;
+  height: 54rpx;
+  padding: 0 18rpx;
+  color: $color-text-regular;
+  background: #fff;
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-pill;
+  font-size: 24rpx;
+}
+
+.time-tab.active {
+  color: $color-primary;
+  background: $color-primary-light;
+  border-color: rgba(255,92,114,.20);
+  font-weight: 800;
+}
+
+.date-range {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-top: 16rpx;
+}
+
+.date-range picker {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-picker {
+  @include flex-center;
+  height: 64rpx;
+  color: $color-text-main;
+  background: #fff;
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-pill;
+  font-size: 24rpx;
+}
+
+.date-separator {
+  color: $color-text-light;
+  font-size: 24rpx;
+}
+
+.search-card {
+  display: flex;
+  align-items: center;
+  height: 82rpx;
+  margin-bottom: 20rpx;
+  padding: 0 26rpx;
+  background: $color-card;
+  border-radius: $radius-pill;
+  box-sizing: border-box;
+}
+
+.search-card text {
+  flex-shrink: 0;
+  margin-right: 14rpx;
+  color: $color-text-placeholder;
+  font-size: 34rpx;
+}
+
+.search-card input {
+  flex: 1;
+  min-width: 0;
+  color: $color-text-main;
+  font-size: 28rpx;
+}
+
+.search-card__clear {
+  margin: 0 0 0 12rpx;
+  color: $color-text-placeholder;
+  font-size: 30rpx;
 }
 
 .order-hint {

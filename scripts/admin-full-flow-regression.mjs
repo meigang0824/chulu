@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 
-const ENV_ID = 'aiwork-8g5erw9d885e24b4'
-const IMAGE = 'cloud://aiwork-8g5erw9d885e24b4/products/product-strawberry-box.jpg'
+const ENV_ID = 'cloudbase-d7gp8xx126047f577'
+const IMAGE = 'cloud://cloudbase-d7gp8xx126047f577/products/product-strawberry-box.jpg'
 const stamp = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 const ids = {
   product: `codex_admin_product_${stamp}`,

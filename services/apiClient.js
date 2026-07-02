@@ -7,6 +7,13 @@
  * 调用 businessApi 云函数
  */
 const CLOUD_FUNCTION_TIMEOUT = 10000
+const CLOUD_FUNCTION_TIMEOUTS = {
+  authWxLogin: 20000,
+  createOrder: 30000,
+  syncPaymentStatus: 20000,
+  updateProfile: 30000,
+  updateRefundStatus: 30000
+}
 
 function cloudTimeout(action) {
   const error = new Error('请求超时，请稍后重试')
@@ -17,8 +24,9 @@ function cloudTimeout(action) {
 
 function withTimeout(promise, action) {
   let timer = null
+  const timeoutMs = CLOUD_FUNCTION_TIMEOUTS[action] || CLOUD_FUNCTION_TIMEOUT
   const timeout = new Promise((resolve, reject) => {
-    timer = setTimeout(() => reject(cloudTimeout(action)), CLOUD_FUNCTION_TIMEOUT)
+    timer = setTimeout(() => reject(cloudTimeout(action)), timeoutMs)
   })
   return Promise.race([promise, timeout]).finally(() => {
     if (timer) clearTimeout(timer)
@@ -36,55 +44,62 @@ function callBusinessApi(action, payload = {}, authToken = '') {
   return callCloudFunction('businessApi', { action, payload, authToken }, action).then(res => {
     const result = res.result || {}
     if (result.ok) return result.data !== undefined ? result.data : result
-    throw new Error(result.message || result.code || '请求失败')
+    const error = new Error(result.message || result.code || '请求失败')
+    error.code = result.code || 'REQUEST_FAILED'
+    error.result = result
+    throw error
   })
 }
 
 // ==================== 商品 ====================
 export const productAPI = {
-  list: (params = {}) => callBusinessApi('listProducts', params),
-  get: (id) => callBusinessApi('getProduct', { id }),
-  create: (data) => callBusinessApi('createProduct', data),
-  update: (id, data) => callBusinessApi('updateProduct', { id, ...data }),
-  delete: (id) => callBusinessApi('deleteProduct', { id }),
+  list: (params = {}, authToken = '') => callBusinessApi('listProducts', params, authToken),
+  get: (id, authToken = '') => callBusinessApi('getProduct', { id }, authToken),
+  create: (data, authToken = '') => callBusinessApi('createProduct', data, authToken),
+  update: (id, data, authToken = '') => callBusinessApi('updateProduct', { id, ...data }, authToken),
+  delete: (id, authToken = '') => callBusinessApi('deleteProduct', { id }, authToken),
 }
 
 // ==================== 订单 ====================
 export const orderAPI = {
-  list: (params = {}) => callBusinessApi('listOrders', params),
-  get: (id) => callBusinessApi('getOrder', { id }),
-  create: (data) => callBusinessApi('createOrder', data),
-  update: (id, data) => callBusinessApi('updateOrder', { id, ...data }),
-  updateStatus: (id, status) => callBusinessApi('updateOrderStatus', { id, status }),
-  createRefund: (data) => callBusinessApi('createRefund', data),
-  updateRefundStatus: (data) => callBusinessApi('updateRefundStatus', data),
+  list: (params = {}, authToken = '') => callBusinessApi('listOrders', params, authToken),
+  get: (id, authToken = '') => callBusinessApi('getOrder', { id }, authToken),
+  create: (data, authToken = '') => callBusinessApi('createOrder', data, authToken),
+  update: (id, data, authToken = '') => callBusinessApi('updateOrder', { id, ...data }, authToken),
+  updateStatus: (id, status, authToken = '') => callBusinessApi('updateOrderStatus', { id, status }, authToken),
+  syncPaymentStatus: (id, authToken = '') => callBusinessApi('syncPaymentStatus', { id }, authToken),
+  cancelPendingPayment: (id, authToken = '') => callBusinessApi('cancelPendingPaymentOrder', { id }, authToken),
+  createRefund: (data, authToken = '') => callBusinessApi('createRefund', data, authToken),
+  updateRefundStatus: (data, authToken = '') => callBusinessApi('updateRefundStatus', data, authToken),
+  cancelRefundRequest: (data, authToken = '') => callBusinessApi('cancelRefundRequest', data, authToken),
 }
 
 // ==================== 团购 ====================
 export const groupAPI = {
-  list: (params = {}) => callBusinessApi('listGroups', params),
-  get: (id) => callBusinessApi('getGroup', { id }),
-  create: (data) => callBusinessApi('createGroup', data),
-  updateStatus: (id, status) => callBusinessApi('updateGroupStatus', { id, status }),
-  delete: (id) => callBusinessApi('deleteGroup', { id }),
+  list: (params = {}, authToken = '') => callBusinessApi('listGroups', params, authToken),
+  get: (id, authToken = '') => callBusinessApi('getGroup', { id }, authToken),
+  create: (data, authToken = '') => callBusinessApi('createGroup', data, authToken),
+  update: (id, data, authToken = '') => callBusinessApi('updateGroup', { id, ...data }, authToken),
+  updateStatus: (id, status, authToken = '') => callBusinessApi('updateGroupStatus', { id, status }, authToken),
+  delete: (id, authToken = '') => callBusinessApi('deleteGroup', { id }, authToken),
 }
 
 // ==================== 备货 ====================
 export const stockAPI = {
-  list: (params = {}) => callBusinessApi('listStock', params),
-  generate: (date) => callBusinessApi('generateStock', { date }).catch(() => {}),
-  update: (id, data) => callBusinessApi('updateStock', { id, ...data }),
+  list: (params = {}, authToken = '') => callBusinessApi('listStock', params, authToken),
+  generate: (date, authToken = '') => callBusinessApi('generateStock', { date }, authToken).catch(() => {}),
+  update: (id, data, authToken = '') => callBusinessApi('updateStock', { id, ...data }, authToken),
 }
 
 // ==================== 统计 ====================
 export const statsAPI = {
-  today: () => callBusinessApi('statsToday'),
+  today: (authToken = '') => callBusinessApi('statsToday', {}, authToken),
 }
 
 // ==================== 店铺配置 ====================
 export const shopAPI = {
   get: () => callBusinessApi('getShopConfig'),
-  update: (data) => callBusinessApi('updateShopConfig', data),
+  update: (data, authToken = '') => callBusinessApi('updateShopConfig', data, authToken),
 }
 
 // ==================== 消息订阅 ====================
@@ -93,21 +108,27 @@ export const notificationAPI = {
   saveAdminSubscription: (data = {}, authToken = '') => callBusinessApi('saveAdminSubscription', data, authToken),
 }
 
+// ==================== 权限 / 用户 ====================
+export const accountAPI = {
+  list: (authToken = '') => callBusinessApi('listAccounts', {}, authToken),
+  updateRole: (accountId, role, authToken = '') => callBusinessApi('updateAccountRole', { accountId, role }, authToken),
+}
+
 // ==================== 地址 ====================
 export const addressAPI = {
-  list: (userId) => callBusinessApi('listAddresses', userId ? { userId } : {}),
-  get: (id) => callBusinessApi('getAddress', { id }),
-  create: (data) => callBusinessApi('createAddress', data),
-  update: (id, data) => callBusinessApi('updateAddress', { id, ...data }),
-  delete: (id) => callBusinessApi('deleteAddress', { id }),
+  list: (userId, authToken = '') => callBusinessApi('listAddresses', userId ? { userId } : {}, authToken),
+  get: (id, authToken = '') => callBusinessApi('getAddress', { id }, authToken),
+  create: (data, authToken = '') => callBusinessApi('createAddress', data, authToken),
+  update: (id, data, authToken = '') => callBusinessApi('updateAddress', { id, ...data }, authToken),
+  delete: (id, authToken = '') => callBusinessApi('deleteAddress', { id }, authToken),
 }
 
 // ==================== 轮播 ====================
 export const bannerAPI = {
   getConfig: () => callBusinessApi('getBannerConfig'),
-  updateConfig: (data) => callBusinessApi('updateBannerConfig', data),
+  updateConfig: (data, authToken = '') => callBusinessApi('updateBannerConfig', data, authToken),
   list: () => callBusinessApi('listBanners'),
-  update: (data) => callBusinessApi('updateBanners', data),
+  update: (data, authToken = '') => callBusinessApi('updateBanners', data, authToken),
 }
 
 // ==================== 兼容旧 callFunction 调用 ====================

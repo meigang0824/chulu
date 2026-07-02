@@ -55,6 +55,7 @@
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import { getShopConfig } from '@/services/dataService'
 import { ensurePageAccess } from '@/utils/auth'
+import { money } from '@/utils/format'
 
 export default {
   components: { CustomNavBar },
@@ -63,7 +64,7 @@ export default {
       shop: {},
       orderId: '',
       orderNo: '',
-      amount: '0.0',
+      amount: '0.00',
       deliveryTime: '',
       receiverText: ''
     }
@@ -75,7 +76,7 @@ export default {
     const data = uni.getStorageSync('order_success_data') || {}
     this.orderId = data.orderId || query.id || ''
     this.orderNo = data.orderId || query.orderNo || query.id || ''
-    this.amount = data.payable ? `￥${data.payable}` : (query.amount ? `￥${query.amount}` : '--')
+    this.amount = data.payable ? money(data.payable) : (query.amount ? money(query.amount) : '--')
     this.deliveryTime = data.deliveryTime || query.deliveryTime || ''
     this.receiverText = (data.receiver && data.phone) ? `${data.receiver} ${data.phone}` : ((query.receiver && query.phone) ? `${query.receiver} ${query.phone}` : '')
     uni.removeStorageSync('order_success_data')

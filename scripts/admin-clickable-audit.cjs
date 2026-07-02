@@ -4,7 +4,7 @@ const path = require('node:path')
 
 const projectPath = '/Users/apple/.openclaw/workspace-wechat/sweet_bakery_uniapp'
 const cliPath = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli'
-const envId = 'aiwork-8g5erw9d885e24b4'
+const envId = 'cloudbase-d7gp8xx126047f577'
 const automatorPort = Number(process.env.ADMIN_AUDIT_PORT || 9430)
 const cloudImage = `cloud://${envId}/products/product-strawberry-box.jpg`
 const testPrefix = 'Codex按钮测试'

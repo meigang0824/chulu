@@ -42,7 +42,7 @@ export default {
     subtitle: { type: String, default: '' },
     brand: { type: String, default: '' },
     slogan: { type: String, default: '' },
-    logo: { type: String, default: 'cloud://aiwork-8g5erw9d885e24b4/icons/logo.png' },
+    logo: { type: String, default: 'cloud://cloudbase-d7gp8xx126047f577/icons/logo.png' },
     mode: { type: String, default: '' },
     background: { type: String, default: '' },
     showBack: { type: Boolean, default: false },

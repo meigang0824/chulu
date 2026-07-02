@@ -1,8 +1,10 @@
-export const CLOUD_ENV_ID = 'aiwork-8g5erw9d885e24b4'
-export const CLOUD_STORAGE_ORIGIN = 'https://6169-aiwork-8g5erw9d885e24b4-1311068699.tcb.qcloud.la'
+export const CLOUD_ENV_ID = 'cloudbase-d7gp8xx126047f577'
+export const CLOUD_STORAGE_BUCKET = '636c-cloudbase-d7gp8xx126047f577-1446367223'
+export const CLOUD_STORAGE_ORIGIN = 'https://636c-cloudbase-d7gp8xx126047f577-1446367223.tcb.qcloud.la'
+export const CLOUD_FILE_ID_PREFIX = `cloud://${CLOUD_ENV_ID}.${CLOUD_STORAGE_BUCKET}`
 
 export function cloudImage(path) {
-  return `cloud://${CLOUD_ENV_ID}/${path}`
+  return `${CLOUD_FILE_ID_PREFIX}/${path}`
 }
 
 export const IMAGE_ASSETS = {
@@ -30,8 +32,6 @@ const CLOUD_IMAGE_PATH_MAP = {
   'banners/home-hero-cake.jpg': 'banners/home-hero-cake.jpg'
 }
 
-const tempFileUrlCache = {}
-
 function cloudStoragePath(path) {
   if (!path) return ''
   const normalized = String(path)
@@ -40,7 +40,7 @@ function cloudStoragePath(path) {
     .replace(/^static\/images\//, '')
     .replace(/^images\//, '')
   if (CLOUD_IMAGE_PATH_MAP[normalized]) return CLOUD_IMAGE_PATH_MAP[normalized]
-  if (/^(products|banners|icons|tabbar)\//.test(normalized)) {
+  if (/^(products|banners|icons|tabbar|login|avatars|post)\//.test(normalized)) {
     return normalized
   }
   return ''
@@ -51,6 +51,9 @@ export function normalizeImageUrl(value, fallback = IMAGE_ASSETS.product) {
   const raw = String(value).trim()
   if (!raw) return fallback || ''
   if (raw.indexOf('cloud://') === 0) {
+    if (raw.indexOf(`cloud://${CLOUD_ENV_ID}/`) === 0) {
+      return `${CLOUD_FILE_ID_PREFIX}/${raw.slice(`cloud://${CLOUD_ENV_ID}/`.length)}`
+    }
     return raw
   }
   const path = cloudStoragePath(raw)
@@ -92,23 +95,7 @@ export function cloudImageHttpsUrl(value) {
 export function resolveImageUrl(value, fallback = IMAGE_ASSETS.product) {
   const fileID = normalizeImageUrl(value, fallback)
   if (!isCloudFileID(fileID)) return Promise.resolve(fileID)
-  if (tempFileUrlCache[fileID]) return tempFileUrlCache[fileID]
   const fallbackUrl = cloudImageHttpsUrl(fileID) || fileID
-  if (fallbackUrl !== fileID) {
-    tempFileUrlCache[fileID] = Promise.resolve(fallbackUrl)
-    return tempFileUrlCache[fileID]
-  }
-  // #ifdef MP-WEIXIN
-  if (typeof wx !== 'undefined' && wx.cloud && typeof wx.cloud.getTempFileURL === 'function') {
-    tempFileUrlCache[fileID] = wx.cloud.getTempFileURL({ fileList: [fileID] })
-      .then(res => {
-        const item = res.fileList && res.fileList[0]
-        return (item && item.tempFileURL) || fallbackUrl
-      })
-      .catch(() => fallbackUrl)
-    return tempFileUrlCache[fileID]
-  }
-  // #endif
   return Promise.resolve(fallbackUrl)
 }
 

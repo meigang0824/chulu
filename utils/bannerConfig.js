@@ -1,4 +1,4 @@
-import { IMAGE_ASSETS, cloudImageHttpsUrl, normalizeImageUrl } from '@/utils/image'
+import { IMAGE_ASSETS, normalizeImageUrl } from '@/utils/image'
 
 const STORAGE_KEY = 'chulu_home_banner_config'
 
@@ -12,10 +12,10 @@ export function getDefaultBannerConfig() {
     banners: [
       {
         id: 'fresh-cake',
-        title: '草莓奶油礼盒',
-        highlight: '今日限量开团',
-        tag: '今日推荐',
-        features: ['新鲜现做', '冷链打包', '次日发货'],
+        title: '',
+        highlight: '',
+        tag: '',
+        features: [],
         image: IMAGE_ASSETS.banner,
         route: '',
         sort: 1,
@@ -23,10 +23,10 @@ export function getDefaultBannerConfig() {
       },
       {
         id: 'toast',
-        title: '手作吐司',
-        highlight: '早餐囤货更划算',
-        tag: '人气单品',
-        features: ['松软拉丝', '低糖配方', '家庭分享'],
+        title: '',
+        highlight: '',
+        tag: '',
+        features: [],
         image: IMAGE_ASSETS.productToast,
         route: '',
         sort: 2,
@@ -34,10 +34,10 @@ export function getDefaultBannerConfig() {
       },
       {
         id: 'tart',
-        title: '酥皮蛋挞',
-        highlight: '下午茶刚刚好',
-        tag: '甜点上新',
-        features: ['外酥内嫩', '现烤出炉', '小份团购'],
+        title: '',
+        highlight: '',
+        tag: '',
+        features: [],
         image: IMAGE_ASSETS.productTart,
         route: '',
         sort: 3,
@@ -96,7 +96,7 @@ export function getActiveBanners(config) {
   const banners = normalized.banners.map((item, index) => {
     const source = sourceBanners.find(sourceItem => sourceItem && sourceItem.id === item.id) || sourceBanners[index] || {}
     const displayImage = source.image && source.image !== source.imageFileID ? source.image : item.image
-    return { ...item, image: cloudImageHttpsUrl(displayImage) || displayImage || item.image }
+    return { ...item, image: displayImage || item.image }
   })
   const enabled = banners.filter(item => item.enabled).sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0))
   return enabled.length ? enabled : banners.slice(0, 1)
