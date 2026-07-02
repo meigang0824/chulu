@@ -30,7 +30,7 @@ import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import ProductCard from '@/components/ProductCard/ProductCard.vue'
 import { getProductById } from '@/services/dataService'
-import { addCartItem, getCartItemCount, getFavoriteItems } from '@/utils/shopState'
+import { addCartItem, getCartItemCount, getFavoriteItems, setFavorite } from '@/utils/shopState'
 
 export default {
   components: { CustomNavBar, EmptyState, ProductCard },
@@ -45,16 +45,47 @@ export default {
   methods: {
     async loadFavorites() {
       const saved = getFavoriteItems()
-      this.items = await Promise.all(saved.map(async item => {
-        if (item.name) return item
-        const product = await getProductById(item.id || item.productId).catch(() => null)
-        return product || item
-      }))
+      let removedCount = 0
+      const items = (await Promise.all(saved.map(async item => {
+        const id = item.id || item.productId
+        if (!id) return null
+        try {
+          const product = await getProductById(id)
+          if (!product) {
+            removedCount += 1
+            setFavorite(item, false)
+            return null
+          }
+          return product
+        } catch {
+          return item
+        }
+      }))).filter(Boolean)
+      this.items = items
+      if (removedCount) {
+        uni.showToast({ title: '已移除失效收藏', icon: 'none' })
+      }
     },
     goDetail(product) {
-      uni.navigateTo({ url: `/pages/product/detail?id=${product.id || product.productId}` })
+      const id = product && (product.productId || product.id || product._id)
+      if (!id) return
+      uni.setStorageSync(`buyer_product_context_${id}`, product)
+      if (product.id && product.id !== id) uni.setStorageSync(`buyer_product_context_${product.id}`, product)
+      uni.navigateTo({ url: `/pages/product/detail?id=${id}` })
     },
     addToCart(product) {
+      const stock = Number(product && product.stock || 0)
+      const limit = Number(product && product.limit || 0)
+      const max = stock > 0 ? Math.min(limit > 0 ? limit : 99, stock) : 0
+      const current = getCartItemCount(product.id || product.productId)
+      if (max <= 0) {
+        uni.showToast({ title: '商品已售罄', icon: 'none' })
+        return
+      }
+      if (current >= max) {
+        uni.showToast({ title: '已到最大购买数量', icon: 'none' })
+        return
+      }
       addCartItem(product, 1)
       const cartCount = getCartItemCount(product.id || product.productId)
       uni.showToast({ title: `购物车已有 ${cartCount} 份`, icon: 'success' })

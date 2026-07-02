@@ -3,7 +3,10 @@
     <CustomNavBar title="订单详情" showBack />
 
     <view class="status-banner">
-      <view class="status-banner__avatar">{{ avatarText }}</view>
+      <view class="status-banner__avatar">
+        <image v-if="order.avatar" :src="order.avatar" mode="aspectFill" />
+        <text v-else>{{ avatarText }}</text>
+      </view>
       <view class="status-banner__main">
         <view class="status-banner__title">{{ order.statusText || '订单处理中' }}</view>
         <text>{{ order.customer || order.receiver || '顾客' }} · {{ order.phone || '暂无电话' }}</text>
@@ -26,9 +29,13 @@
         <view><text>申请金额</text><view>￥{{ money(order.refundAmount || order.payable || order.amount) }}</view></view>
         <view><text>申请原因</text><view>{{ order.refundReasonText || '用户已提交售后申请' }}</view></view>
       </view>
+      <view v-if="order.refundError" class="refund-card__error">
+        <view>{{ order.refundError }}</view>
+        <button @tap="copyRefundError">复制原因</button>
+      </view>
       <view v-if="order.refundStatus === 'pending'" class="refund-card__actions">
         <button class="refund-card__btn" @tap="handleRefund('rejected')">拒绝售后</button>
-        <button class="refund-card__btn refund-card__btn--primary" @tap="handleRefund('approved')">同意退款</button>
+        <button class="refund-card__btn refund-card__btn--primary" @tap="handleRefund('approved')">{{ approveRefundText }}</button>
       </view>
     </view>
 
@@ -145,6 +152,9 @@ export default {
       if (this.order.refundStatus === 'rejected') return '已拒绝'
       return '待处理'
     },
+    approveRefundText() {
+      return this.order.refundError ? '重试退款' : '同意退款'
+    },
     renderItems() {
       return (this.order.items || []).map((item, index) => ({
         ...item,
@@ -173,14 +183,18 @@ export default {
       })
     },
     contactCustomer() {
-      if (!this.order.phone) {
+      const phone = String(this.order.fullPhone || this.order.phone || '').replace(/[^\d]/g, '')
+      if (!phone) {
         uni.showToast({ title: '暂无联系电话', icon: 'none' })
         return
       }
-      uni.makePhoneCall({ phoneNumber: String(this.order.phone).replace(/\s+/g, '') })
+      uni.makePhoneCall({ phoneNumber: phone })
     },
     copyOrderId() {
       uni.setClipboardData({ data: this.order.detailId || this.order.id || '' })
+    },
+    copyRefundError() {
+      uni.setClipboardData({ data: this.order.refundError || '' })
     },
     goDelivery() {
       uni.navigateTo({ url: '/pages/admin/delivery-address/index' })
@@ -201,8 +215,10 @@ export default {
     handleRefund(status) {
       const approved = status === 'approved'
       uni.showModal({
-        title: approved ? '同意退款' : '拒绝售后',
-        content: approved
+        title: approved ? this.approveRefundText : '拒绝售后',
+        content: approved && this.order.refundError
+          ? `上次退款失败：${this.order.refundError}\n确认重新发起退款吗？`
+          : approved
           ? '确认同意该申请吗？同意后会执行退款，取消申请会同步取消订单并回补库存。'
           : '确认拒绝该售后申请吗？订单会标记为已拒绝退款。',
         confirmText: approved ? '同意' : '拒绝',
@@ -303,6 +319,36 @@ export default {
   text-align: right;
 }
 
+.refund-card__error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 16rpx;
+  padding: 14rpx 18rpx;
+  color: $color-primary;
+  background: $color-primary-light;
+  border: 1rpx solid rgba(255, 92, 114, .18);
+  border-radius: 16rpx;
+  font-size: 24rpx;
+  line-height: 1.45;
+}
+.refund-card__error view { flex: 1; min-width: 0; }
+.refund-card__error button {
+  @include flex-center;
+  flex-shrink: 0;
+  width: 128rpx;
+  height: 48rpx;
+  margin: 0;
+  padding: 0;
+  color: $color-primary;
+  background: #fff;
+  border: 1rpx solid rgba(255, 92, 114, .22);
+  border-radius: $radius-pill;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
 .refund-card__actions {
   display: flex;
   gap: 16rpx;
@@ -364,14 +410,17 @@ export default {
 
 .status-banner__avatar {
   @include flex-center;
+  flex-shrink: 0;
   width: 88rpx;
   height: 88rpx;
+  overflow: hidden;
   color: $color-primary;
   background: $color-primary-light;
   border-radius: $radius-md;
   font-size: 34rpx;
   font-weight: 800;
 }
+.status-banner__avatar image { width: 100%; height: 100%; }
 
 .status-banner__main {
   flex: 1;

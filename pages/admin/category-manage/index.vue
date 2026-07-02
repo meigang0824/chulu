@@ -60,6 +60,7 @@
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import { productAPI, shopAPI } from '@/services/apiClient'
 import { ensurePageAccess, getAuthSession } from '@/utils/auth'
+import { showCloudError } from '@/utils/apiError'
 
 export default {
   components: { CustomNavBar },
@@ -136,7 +137,7 @@ export default {
               uni.showToast({ title: '已删除', icon: 'success' })
             } catch (e) {
               console.error('删除分类失败:', e)
-              uni.showToast({ title: '删除失败，请重试', icon: 'none' })
+              showCloudError(e)
             }
           }
         }
@@ -149,6 +150,14 @@ export default {
       }
       if (!this.form.key.trim()) {
         uni.showToast({ title: '请输入分类Key', icon: 'none' })
+        return
+      }
+      if (!/^[a-z][a-z0-9_-]*$/.test(this.form.key.trim())) {
+        uni.showToast({ title: '分类Key请使用英文小写、数字或短横线', icon: 'none' })
+        return
+      }
+      if (this.editingCategory && this.form.key !== this.editingCategory.key && this.getProductCount(this.editingCategory.key) > 0) {
+        uni.showToast({ title: '该分类下有商品，不能修改Key', icon: 'none' })
         return
       }
       
@@ -176,7 +185,7 @@ export default {
         uni.showToast({ title: '保存成功', icon: 'success' })
       } catch (e) {
         console.error('保存分类失败:', e)
-        uni.showToast({ title: '保存失败，请重试', icon: 'none' })
+        showCloudError(e)
       }
     },
     async saveCategories(categories) {

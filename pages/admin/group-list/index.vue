@@ -80,6 +80,8 @@ import { ensurePageAccess, getAuthSession } from '@/utils/auth'
 import { groupAPI } from '@/services/apiClient'
 import { IMAGE_ASSETS } from '@/utils/image'
 import { hydrateGroupImages } from '@/services/dataService'
+import { formatDeadlineText } from '@/utils/format'
+import { showCloudError } from '@/utils/apiError'
 
 export default {
   components: { CustomNavBar, StatusTag, SkeletonBlock, EmptyState },
@@ -119,7 +121,11 @@ export default {
       this.loading = true
       try {
         const groups = await groupAPI.list({}, this.authToken())
-        this.groups = await Promise.all((groups || []).map(hydrateGroupImages))
+        const hydratedGroups = await Promise.all((groups || []).map(hydrateGroupImages))
+        this.groups = hydratedGroups.map(group => ({
+          ...group,
+          deadline: formatDeadlineText(group.deadlineAt, group.deadline || '')
+        }))
       } catch (e) {
         console.error('加载团购失败:', e)
         this.groups = []
@@ -129,6 +135,7 @@ export default {
     formatTime(time) {
       if (!time) return ''
       const d = new Date(time)
+      if (Number.isNaN(d.getTime())) return ''
       return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
     },
     viewGroup(group) {
@@ -148,7 +155,7 @@ export default {
             uni.showToast({ title: '团购已结束', icon: 'success' })
             this.loadGroups()
           } catch (e) {
-            uni.showToast({ title: '操作失败', icon: 'none' })
+            showCloudError(e)
           }
         }
       })
@@ -164,7 +171,7 @@ export default {
             uni.showToast({ title: '已删除', icon: 'success' })
             this.loadGroups()
           } catch (e) {
-            uni.showToast({ title: '删除失败', icon: 'none' })
+            showCloudError(e)
           }
         }
       })

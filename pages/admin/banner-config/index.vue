@@ -119,7 +119,7 @@
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import { getActiveBanners, getDefaultBannerConfig, saveBannerConfig } from '@/utils/bannerConfig'
 import { IMAGE_OPTIONS, resolveImageUrl, uploadImageToCloud } from '@/utils/image'
-import { adminAction, getAdminProducts, getDisplayBannerConfigFromCloud } from '@/services/dataService'
+import { adminAction, getActiveGroups, getAdminProducts, getDisplayBannerConfigFromCloud } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
 
@@ -185,7 +185,7 @@ export default {
           uni.showLoading({ title: '上传中' })
           try {
             const fileID = await uploadImageToCloud(filePath, 'banners')
-            this.addImageOption(fileID)
+            this.addImageOption(fileID, `自定义图片 ${index + 1}`)
             this.setBanner(index, 'imageFileID', fileID)
             this.setBanner(index, 'image', await resolveImageUrl(fileID, fileID))
           } catch (error) {
@@ -211,7 +211,7 @@ export default {
     },
     imageLabel(value) {
       const item = this.imageOptions.find(option => option.value === value)
-      return item ? item.label : '选择图片'
+      return item ? item.label : '自定义图片'
     },
     routeIndex(value) {
       return Math.max(this.routeOptions.findIndex(item => item.value === value), 0)
@@ -223,6 +223,7 @@ export default {
     async applyBannerConfig(config) {
       const banners = await Promise.all((config.banners || []).map(async item => {
         const imageFileID = item.imageFileID || item.image
+        this.addImageOption(imageFileID, item.label || `轮播图 ${item.sort || ''}`.trim() || '当前图片')
         return {
           ...item,
           imageFileID,
@@ -268,7 +269,7 @@ export default {
       }
     },
     async loadBannerConfig() {
-      const config = await getDisplayBannerConfigFromCloud()
+      const config = await getDisplayBannerConfigFromCloud(true)
       await this.applyBannerConfig(config)
     }
   },
@@ -285,9 +286,16 @@ export default {
   },
   async onShow() {
     try {
-      const products = await getAdminProducts()
+      const [products, groups] = await Promise.all([
+        getAdminProducts(),
+        getActiveGroups().catch(() => [])
+      ])
       this.routeOptions = [
         { label: '不跳转', value: '' },
+        ...groups.map(item => ({
+          label: `团购：${item.title || item.name || '未命名团购'}`,
+          value: `/pages/category/index?groupId=${item.id || item._id || item.groupId}`
+        })),
         ...products.map(item => ({ label: item.name, value: `/pages/product/detail?id=${item.id}` }))
       ]
     } catch {

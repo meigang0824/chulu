@@ -3,15 +3,19 @@
     <CustomNavBar title="售后管理" showBack />
 
     <view class="tabs card">
-      <view
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="tab"
-        :class="{ active: active === tab.key }"
-        @tap="active = tab.key"
-      >
-        {{ tab.text }}<text>{{ tab.count }}</text>
-      </view>
+      <scroll-view scroll-x class="tabs__scroll" show-scrollbar="false">
+        <view class="tabs__inner">
+          <view
+            v-for="tab in tabs"
+            :key="tab.key"
+            class="tab"
+            :class="{ active: active === tab.key }"
+            @tap="active = tab.key"
+          >
+            {{ tab.text }}<text>{{ tab.count }}</text>
+          </view>
+        </view>
+      </scroll-view>
     </view>
 
     <view v-if="loading" class="loading-list">
@@ -41,7 +45,10 @@
         <view class="refund-card__body">
           <view><text>{{ amountLabel(order) }}</text><view>￥{{ money(order.refundAmount || order.payable || order.amount) }}</view></view>
           <view><text>{{ reasonLabel(order) }}</text><view>{{ reasonText(order) }}</view></view>
-          <view><text>{{ noLabel(order) }}</text><view>{{ isCancelledOrder(order) ? (order.cancelledAt || '-') : (order.refundNo || '-') }}</view></view>
+          <view><text>{{ noLabel(order) }}</text><view>{{ noText(order) }}</view></view>
+        </view>
+        <view v-if="order.refundError" class="refund-card__error">
+          {{ order.refundError }}
         </view>
 
         <view class="refund-card__items">
@@ -56,6 +63,7 @@
 
         <view class="refund-card__actions">
           <button class="refund-card__btn" @tap="viewOrder(order)">查看订单</button>
+          <button v-if="order.refundError" class="refund-card__btn" @tap="copyRefundError(order)">复制原因</button>
           <button v-if="order.refundStatus === 'pending'" class="refund-card__btn" @tap="handleRefund(order, 'rejected')">拒绝售后</button>
           <button v-if="order.refundStatus === 'pending'" class="refund-card__btn refund-card__btn--primary" @tap="handleRefund(order, 'approved')">{{ approveText(order) }}</button>
         </view>
@@ -88,24 +96,27 @@ export default {
     tabs() {
       return [
         { key: 'pending', text: '待处理', count: this.orders.filter(item => item.refundStatus === 'pending').length },
-        { key: 'cancelled', text: '已取消', count: this.orders.filter(item => item.status === 'cancelled').length },
+        { key: 'cancelled', text: '订单取消', count: this.orders.filter(item => item.status === 'cancelled').length },
+        { key: 'withdrawn', text: '已撤回', count: this.orders.filter(item => this.isWithdrawnRefund(item)).length },
         { key: 'done', text: '已处理', count: this.orders.filter(item => ['approved', 'rejected'].includes(item.refundStatus)).length }
       ]
     },
     filteredOrders() {
       if (this.active === 'pending') return this.orders.filter(item => item.refundStatus === 'pending')
       if (this.active === 'cancelled') return this.orders.filter(item => item.status === 'cancelled')
+      if (this.active === 'withdrawn') return this.orders.filter(item => this.isWithdrawnRefund(item))
       return this.orders.filter(item => ['approved', 'rejected'].includes(item.refundStatus))
     },
     emptyTitle() {
       if (this.active === 'pending') return '暂无待处理售后'
       if (this.active === 'cancelled') return '暂无取消订单'
+      if (this.active === 'withdrawn') return '暂无撤回记录'
       return '暂无售后记录'
     }
   },
   onLoad(query = {}) {
     if (!ensurePageAccess('/pages/admin/after-sales/index', '需要店长权限')) return
-    if (['pending', 'cancelled', 'done'].includes(query.active)) this.active = query.active
+    if (['pending', 'cancelled', 'withdrawn', 'done'].includes(query.active)) this.active = query.active
   },
   onShow() {
     if (!ensurePageAccess('/pages/admin/after-sales/index', '需要店长权限')) return
@@ -116,14 +127,18 @@ export default {
     async loadOrders() {
       this.loading = true
       const orders = await getAdminOrders('all')
-      this.orders = (orders || []).filter(item => item.refundStatus || item.status === 'cancelled')
-      if (this.active === 'pending' && !this.orders.some(item => item.refundStatus === 'pending') && this.orders.some(item => item.status === 'cancelled')) {
-        this.active = 'cancelled'
+      this.orders = (orders || []).filter(item => item.refundStatus || item.status === 'cancelled' || item.refundCancelledAt)
+      if (!this.filteredOrders.length) {
+        const first = this.tabs.find(tab => tab.count > 0)
+        if (first) this.active = first.key
       }
       this.loading = false
     },
     isCancelledOrder(order) {
       return order.status === 'cancelled'
+    },
+    isWithdrawnRefund(order) {
+      return Boolean(order.refundCancelledAt && !order.refundStatus && order.status !== 'cancelled')
     },
     isCancelRequest(order) {
       return order.refundType === 'cancelOrder'
@@ -135,19 +150,28 @@ export default {
       return this.isCancelRequest(order) || this.isCancelledOrder(order) ? '取消说明' : '申请原因'
     },
     noLabel(order) {
+      if (this.isWithdrawnRefund(order)) return '撤回时间'
       return this.isCancelledOrder(order) ? '取消时间' : '退款编号'
     },
+    noText(order) {
+      if (this.isCancelledOrder(order)) return order.cancelledAt || '-'
+      if (this.isWithdrawnRefund(order)) return order.refundCancelledAt || '-'
+      return order.refundNo || '-'
+    },
     approveText(order) {
+      if (order.refundError && order.refundStatus === 'pending') return '重试退款'
       return this.isCancelRequest(order) ? '同意并退款' : '同意退款'
     },
     tagType(order) {
       if (this.isCancelledOrder(order)) return 'cancelled'
+      if (this.isWithdrawnRefund(order)) return 'cancelled'
       if (order.refundStatus === 'approved') return 'refundApproved'
       if (order.refundStatus === 'rejected') return 'refundRejected'
       return 'refund'
     },
     tagText(order) {
       if (this.isCancelledOrder(order)) return '已取消'
+      if (this.isWithdrawnRefund(order)) return '已撤回'
       if (this.isCancelRequest(order) && order.refundStatus === 'pending') return '取消待审核'
       if (order.refundStatus === 'approved') return '已同意'
       if (order.refundStatus === 'rejected') return '已拒绝'
@@ -155,6 +179,7 @@ export default {
     },
     reasonText(order) {
       if (this.isCancelledOrder(order)) return '店长已同意取消，库存已自动回补'
+      if (this.isWithdrawnRefund(order)) return order.refundReasonText || '用户已撤回售后申请'
       if (this.isCancelRequest(order)) return order.refundReasonText || '用户申请取消订单，待同意后退款'
       return order.refundReasonText || '用户已提交售后申请'
     },
@@ -167,11 +192,14 @@ export default {
     viewOrder(order) {
       uni.navigateTo({ url: `/pages/admin/order-detail/index?id=${order.id}` })
     },
+    copyRefundError(order) {
+      uni.setClipboardData({ data: order.refundError || '' })
+    },
     handleRefund(order, status) {
       const approved = status === 'approved'
       uni.showModal({
         title: approved ? this.approveText(order) : '拒绝售后',
-        content: approved ? '确认同意该申请吗？同意后会执行退款并取消订单。' : '确认拒绝该售后申请吗？',
+        content: approved && order.refundError ? `上次退款失败：${order.refundError}\n确认重新发起退款吗？` : (approved ? '确认同意该申请吗？同意后会执行退款并取消订单。' : '确认拒绝该售后申请吗？'),
         confirmText: approved ? '同意' : '拒绝',
         confirmColor: approved ? '#ff5c72' : '#8f4d20',
         success: async ({ confirm }) => {
@@ -197,8 +225,10 @@ export default {
 @import '@/common/theme.scss';
 
 .after-sales { padding-bottom: 80rpx; }
-.tabs { display:flex; gap:14rpx; margin-top:18rpx; padding:16rpx; }
-.tab { @include flex-center; flex:1; height:64rpx; color:$color-text-regular; background:#fff; border:1rpx solid $color-border-light; border-radius:$radius-pill; font-size:26rpx; }
+.tabs { margin-top:18rpx; padding:16rpx; overflow:hidden; }
+.tabs__scroll { width:100%; white-space:nowrap; }
+.tabs__inner { display:inline-flex; gap:14rpx; min-width:100%; }
+.tab { @include flex-center; flex:0 0 auto; min-width:150rpx; height:64rpx; padding:0 20rpx; color:$color-text-regular; background:#fff; border:1rpx solid $color-border-light; border-radius:$radius-pill; font-size:26rpx; box-sizing:border-box; }
 .tab text { margin-left:8rpx; color:$color-text-light; font-size:22rpx; }
 .tab.active { color:$color-primary; background:$color-primary-light; border-color:rgba(255,92,114,.22); font-weight:800; }
 .loading-list,.refund-list { margin-top:18rpx; }
@@ -212,6 +242,7 @@ export default {
 .refund-card__body > view { display:flex; justify-content:space-between; gap:20rpx; padding-top:14rpx; color:$color-text-regular; font-size:25rpx; }
 .refund-card__body text { flex-shrink:0; color:$color-text-main; font-weight:700; }
 .refund-card__body view view { min-width:0; text-align:right; @include text-ellipsis; }
+.refund-card__error { margin-top:16rpx; padding:14rpx 18rpx; color:$color-primary; background:$color-primary-light; border:1rpx solid rgba(255,92,114,.18); border-radius:16rpx; font-size:24rpx; line-height:1.45; }
 .refund-card__items { display:flex; flex-direction:column; gap:12rpx; margin-top:18rpx; padding:14rpx; background:$color-bg-light; border:1rpx solid $color-border-light; border-radius:$radius-card; }
 .refund-item { display:flex; align-items:center; gap:14rpx; min-width:0; }
 .refund-item image { flex-shrink:0; width:68rpx; height:68rpx; border-radius:14rpx; background:$color-bg-deep; }

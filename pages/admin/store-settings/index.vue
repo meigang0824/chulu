@@ -2,7 +2,17 @@
   <view class="page store-settings">
     <CustomNavBar title="门店配置" showBack />
 
-    <view class="card form-card">
+    <view class="config-tabs card">
+      <view
+        v-for="tab in configTabs"
+        :key="tab.key"
+        class="config-tab"
+        :class="{ active: activeConfigTab === tab.key }"
+        @tap="activeConfigTab = tab.key"
+      >{{ tab.text }}</view>
+    </view>
+
+    <view v-if="activeConfigTab === 'store'" class="card form-card">
       <view class="section-title">基础信息</view>
       <view class="logo-setting">
         <view class="logo-setting__label">店铺Logo</view>
@@ -37,7 +47,7 @@
       </view>
     </view>
 
-    <view class="card form-card">
+    <view v-if="activeConfigTab === 'store'" class="card form-card">
       <view class="section-title">履约与客服</view>
       <view v-for="field in serviceFields" :key="field.key" class="form-line">
         <view class="form-line__label">{{ field.label }}</view>
@@ -56,8 +66,8 @@
       </view>
     </view>
 
-    <view class="card form-card">
-      <view class="section-title">下单展示</view>
+    <view v-if="activeConfigTab === 'order'" class="card form-card">
+      <view class="section-title">下单规则</view>
       <view v-for="field in checkoutFields" :key="field.key" class="form-line">
         <view class="form-line__label">{{ field.label }}</view>
         <input
@@ -75,9 +85,21 @@
       </view>
     </view>
 
+    <view v-if="activeConfigTab === 'message'" class="card form-card">
+      <view class="section-title">消息模板</view>
+      <view v-for="field in templateFields" :key="field.key" class="form-line">
+        <view class="form-line__label">{{ field.label }}</view>
+        <input
+          v-model.trim="form[field.key]"
+          :placeholder="field.placeholder"
+          :maxlength="field.maxlength || 120"
+        />
+      </view>
+    </view>
+
     <view class="footer">
       <button class="primary-btn" :disabled="saving" @tap="submit">
-        {{ saving ? '保存中' : '保存门店配置' }}
+        {{ saving ? '保存中' : saveButtonText }}
       </button>
     </view>
   </view>
@@ -91,7 +113,30 @@ import { ensurePageAccess } from '@/utils/auth'
 import { resolveImageUrl, uploadImageToCloud } from '@/utils/image'
 
 function createInitialForm() {
-  return {}
+  return {
+    name: '',
+    bakeryName: '',
+    slogan: '',
+    bakeryTag: '',
+    assurance: '',
+    deliveryRange: '统一配送',
+    deliveryRangeDetail: '满额后统一配送，按团购截单后打包发货',
+    deliveryTime: '次日打包发货',
+    customerService: '',
+    phone: '',
+    address: '',
+    orderTemplateId: '',
+    afterSalesTemplateId: '',
+    checkout: {
+      deliveryTime: '次日打包发货',
+      notePlaceholder: '口味、偏好或建议等(选填)',
+      serviceText: '',
+      payText: '微信支付',
+      deliveryFee: 0,
+      minimumOrderAmount: 88,
+      groupDiscount: 0
+    }
+  }
 }
 
 export default {
@@ -102,26 +147,33 @@ export default {
       saving: false,
       uploadingLogo: false,
       logoPreview: '',
+      activeConfigTab: 'store',
+      configTabs: [
+        { key: 'store', text: '门店资料' },
+        { key: 'order', text: '下单规则' },
+        { key: 'message', text: '消息模板' }
+      ],
       baseFields: [
         { key: 'name', label: '品牌名称', placeholder: '例如：初炉' },
         { key: 'bakeryName', label: '门店全称', placeholder: '例如：初炉烘焙坊' },
         { key: 'slogan', label: '品牌标语', placeholder: '例如：初炉新鲜，趁热成团 ♡' },
         { key: 'bakeryTag', label: '品牌角标', placeholder: '例如：安心烘焙' },
-        { key: 'notice', label: '经营提示', placeholder: '门店经营提示文案', type: 'textarea', maxlength: 120 },
         { key: 'assurance', label: '服务承诺', placeholder: '例如：食材严格把控 · 新鲜现做 · 冷链打包', type: 'textarea', maxlength: 120 }
       ],
       serviceFields: [
-        { key: 'deliveryRange', label: '履约方式', placeholder: '例如：快递发货 / 门店自提 / 同城配送' },
-        { key: 'deliveryRangeDetail', label: '履约说明', placeholder: '例如：默认快递发货，本地可自提或同城配送', type: 'textarea', maxlength: 120 },
-        { key: 'deliveryTime', label: '默认发货时间', placeholder: '例如：次日打包发货' },
+        { key: 'deliveryRange', label: '配送方式', placeholder: '统一配送' },
+        { key: 'deliveryRangeDetail', label: '配送说明', placeholder: '例如：满额后统一配送，按团购截单后打包发货', type: 'textarea', maxlength: 120 },
+        { key: 'deliveryTime', label: '默认配送时间', placeholder: '例如：次日打包发货' },
         { key: 'customerService', label: '客服时间', placeholder: '例如：8:00–20:00' },
         { key: 'phone', label: '联系电话', placeholder: '例如：400-888-2025' },
-        { key: 'address', label: '门店地址', placeholder: '请输入门店详细地址', type: 'textarea', maxlength: 120 },
+        { key: 'address', label: '门店地址', placeholder: '请输入门店详细地址', type: 'textarea', maxlength: 120 }
+      ],
+      templateFields: [
         { key: 'orderTemplateId', label: '下单订阅模板ID', placeholder: '微信公众平台订阅消息模板ID' },
         { key: 'afterSalesTemplateId', label: '售后订阅模板ID', placeholder: '微信公众平台订阅消息模板ID' }
       ],
       checkoutFields: [
-        { key: 'deliveryTime', label: '确认订单发货文案', placeholder: '例如：次日打包发货' },
+        { key: 'deliveryTime', label: '确认订单配送文案', placeholder: '例如：次日打包发货' },
         { key: 'notePlaceholder', label: '订单备注提示', placeholder: '例如：口味、偏好或建议等(选填)' },
         { key: 'serviceText', label: '支付说明', placeholder: '例如：新鲜现做，按单打包发货，感谢等待～' },
         { key: 'payText', label: '支付按钮文案', placeholder: '例如：微信支付' },
@@ -143,7 +195,7 @@ export default {
         ...createInitialForm(),
         ...config,
         checkout: {
-          ...{},
+          ...createInitialForm().checkout,
           ...(config.checkout || {}),
           minimumOrderAmount: Number(config.checkout && config.checkout.minimumOrderAmount !== undefined && config.checkout.minimumOrderAmount !== ''
             ? config.checkout.minimumOrderAmount
@@ -158,6 +210,13 @@ export default {
   computed: {
     logoText() {
       return (this.form.name || this.form.bakeryName || '初').slice(0, 1)
+    },
+    activeTabText() {
+      const tab = this.configTabs.find(item => item.key === this.activeConfigTab)
+      return tab ? tab.text : '门店配置'
+    },
+    saveButtonText() {
+      return `保存${this.activeTabText}`
     }
   },
   methods: {
@@ -192,11 +251,20 @@ export default {
       })
     },
     validate() {
-      if (!this.form.name) return '请填写品牌名称'
-      if (!this.form.slogan) return '请填写品牌标语'
-      if (!this.form.address) return '请填写门店地址'
-      if (!this.form.phone) return '请填写联系电话'
-      if (!this.form.checkout.deliveryTime) return '请填写发货时间文案'
+      if (this.activeConfigTab === 'store') {
+        if (!this.form.name) return '请填写品牌名称'
+        if (!this.form.slogan) return '请填写品牌标语'
+        if (!this.form.address) return '请填写门店地址'
+        if (!this.form.phone) return '请填写联系电话'
+      }
+      if (this.activeConfigTab === 'order') {
+        if (!this.form.checkout.deliveryTime) return '请填写发货时间文案'
+        if (Number(this.form.checkout.minimumOrderAmount || 0) < 0) return '最低下单金额不能小于0'
+        if (Number(this.form.checkout.deliveryFee || 0) < 0) return '默认运费不能小于0'
+      }
+      if (this.activeConfigTab === 'message') {
+        if (!this.form.orderTemplateId && !this.form.afterSalesTemplateId) return '请至少填写一个订阅模板ID'
+      }
       return ''
     },
     async submit() {
@@ -219,7 +287,7 @@ export default {
           }
         }
         await saveShopConfigToCloud(payload)
-        uni.showToast({ title: '门店配置已更新', icon: 'success' })
+        uni.showToast({ title: `${this.activeTabText}已保存`, icon: 'success' })
       } catch (error) {
         showCloudError(error)
       } finally {
@@ -235,6 +303,32 @@ export default {
 
 .store-settings {
   padding-bottom: 180rpx;
+}
+
+.config-tabs {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 20rpx;
+  padding: 12rpx;
+}
+
+.config-tab {
+  @include flex-center;
+  flex: 1;
+  min-width: 0;
+  height: 60rpx;
+  color: $color-text-regular;
+  background: #fff;
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-pill;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.config-tab.active {
+  color: $color-primary;
+  background: $color-primary-light;
+  border-color: rgba(255, 92, 114, .2);
 }
 
 .form-card {

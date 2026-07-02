@@ -27,16 +27,12 @@
         </view>
         <view class="field">
           <view class="field__label">履约方式</view>
-          <view class="picker-line" @tap="pick('deliveryRange')">{{ groupForm.deliveryRange }}<text>〉</text></view>
+          <view class="picker-line picker-line--static">{{ groupForm.deliveryRange }}</view>
         </view>
-      </view>
-      <view class="batch-actions">
-        <button @tap="selectRecommended">选择当前 {{ filteredProducts.length }} 款</button>
-        <button @tap="clearSelected">清空重选</button>
       </view>
     </view>
 
-    <view v-if="selectedCount" class="selected-panel card">
+    <view class="selected-panel card">
       <view class="section-head">
         <view>
           <view class="section-title">已选商品</view>
@@ -44,7 +40,8 @@
         </view>
         <view class="pool-count">预计 ￥{{ estimatedSales }}</view>
       </view>
-      <scroll-view scroll-x class="selected-scroll" show-scrollbar="false">
+      <view v-if="!selectedCount" class="selected-empty">还没有选择商品，先从下方商品池补充本场团商品。</view>
+      <scroll-view v-else scroll-x class="selected-scroll" show-scrollbar="false">
         <view class="selected-list">
           <view v-for="item in selectedItems" :key="item.id" class="selected-item">
             <image :src="item.image" mode="aspectFill" />
@@ -73,8 +70,11 @@
         </view>
       </scroll-view>
       <view v-if="excludedCount > 0" class="filter-toggle">
-        <switch :checked="showAllProducts" @change="showAllProducts = $event.detail.value" color="#e84f5f" />
-        <text>显示已参团商品（{{ excludedCount }}款）</text>
+        <text>{{ excludedCount }} 款商品已在其他团，可继续加入本团</text>
+      </view>
+      <view class="batch-actions">
+        <button @tap="selectRecommended">选择当前 {{ filteredProducts.length }} 款</button>
+        <button @tap="clearSelected">清空重选</button>
       </view>
     </view>
 
@@ -84,7 +84,7 @@
           <view class="section-title">已上架商品</view>
           <view class="section-subtitle">点击选择商品加入本场团</view>
         </view>
-        <view class="pool-count">已选 {{ selectedCount }}/{{ filteredProducts.length }} 款</view>
+      <view class="pool-count">已选 {{ selectedCount }}/{{ filteredProducts.length }} 款</view>
       </view>
 
       <view v-if="loading" class="state-card">正在加载商品...</view>
@@ -101,10 +101,11 @@
           <view class="pool-item__main">
             <view class="pool-item__name">{{ product.name }}</view>
             <view class="pool-item__desc">{{ product.desc || '新鲜烘焙商品' }}</view>
-            <view class="pool-item__meta">
-              <text>￥{{ money(product.price) }}</text>
-              <text>库存 {{ product.stock || product.totalStock || 0 }}</text>
-            </view>
+              <view class="pool-item__meta">
+                <text>￥{{ money(product.price) }}</text>
+                <text>库存 {{ product.stock || product.totalStock || 0 }}</text>
+                <text v-if="isProductInActiveGroup(product)">其他团中</text>
+              </view>
           </view>
           <view class="select-dot">{{ isSelected(product.id) ? '✓' : '+' }}</view>
         </view>
@@ -163,7 +164,6 @@ export default {
       productIdsInActiveGroups: [],
       editGroupId: '',
       editGroupStatus: '',
-      showAllProducts: false,
       categoryOptions: [{ key: 'all', text: '全部' }],
       todayDate: defaultDeadlineDate(),
       groupForm: {
@@ -171,7 +171,7 @@ export default {
         deadlineDate: defaultDeadlineDate(),
         deadlineTime: '22:00',
         deliveryTime: '次日打包发货',
-        deliveryRange: '快递发货 / 门店自提 / 同城配送'
+        deliveryRange: '统一配送'
       }
     }
   },
@@ -199,8 +199,7 @@ export default {
       return this.products.filter(item => {
         const inCategory = this.activeCategory === 'all' || item.categoryKey === this.activeCategory
         const inKeyword = !kw || String(item.name || '').toLowerCase().includes(kw) || String(item.desc || '').toLowerCase().includes(kw)
-        const notInActiveGroup = this.showAllProducts || !this.isProductInActiveGroup(item)
-        return inCategory && inKeyword && notInActiveGroup
+        return inCategory && inKeyword
       })
     },
     excludedCount() {
@@ -296,7 +295,7 @@ export default {
     pick(key) {
       const map = {
         deliveryTime: ['次日打包发货', '48小时内发货', '指定日期统一发货'],
-        deliveryRange: ['快递发货 / 门店自提 / 同城配送', '仅快递发货', '仅门店自提', '快递发货 + 门店自提']
+        deliveryRange: ['统一配送']
       }
       uni.showActionSheet({
         itemList: map[key],
@@ -347,6 +346,11 @@ export default {
           totalStock: this.totalStock,
           products: this.selectedItems.map((item, index) => {
             const image = item.imageFileID || item.image
+            const gallery = Array.isArray(item.galleryFileIDs) && item.galleryFileIDs.length
+              ? item.galleryFileIDs
+              : Array.isArray(item.gallery) && item.gallery.length
+                ? item.gallery
+                : [image].filter(Boolean)
             return {
               id: item.id,
               productId: item.id,
@@ -369,8 +373,8 @@ export default {
               deliveryTime: this.groupForm.deliveryTime,
               deliveryRange: this.groupForm.deliveryRange,
               fulfillmentMethods: this.groupForm.deliveryRange.split('/').map(item => item.trim()).filter(Boolean),
-              gallery: [image],
-              galleryFileIDs: [image],
+              gallery,
+              galleryFileIDs: gallery,
               bannerImage: image,
               bannerImageFileID: image
             }
@@ -431,7 +435,6 @@ export default {
         deliveryRange: group.deliveryRange || this.groupForm.deliveryRange
       }
       this.selectedItems = (Array.isArray(group.products) ? group.products : []).map(this.normalizeSelectedFromGroup)
-      this.showAllProducts = true
     }
   },
   onLoad(query = {}) {
@@ -446,7 +449,7 @@ export default {
 @import '@/common/theme.scss';
 
 .create-group { padding-bottom: 310rpx; }
-.create-group--editing { padding-bottom: 190rpx; }
+.create-group--editing { padding-bottom: 230rpx; }
 .group-settings,.toolbar,.selected-panel,.product-pool { margin-top:22rpx; padding:26rpx; }
 .section-title { @include text-card-title; font-size:32rpx; font-weight:$font-weight-heavy; }
 .section-subtitle { margin-top:8rpx; @include text-caption($color-text-light); }
@@ -456,6 +459,7 @@ export default {
 .field__label text { color:$color-primary; }
 .field input,.picker-line { width:100%; height:56rpx; margin-top:10rpx; color:$color-text-main; font-size:26rpx; }
 .picker-line { display:flex; align-items:center; justify-content:space-between; }
+.picker-line--static { justify-content:flex-start; color:$color-text-regular; }
 .deadline-pickers { display:grid; grid-template-columns:1fr 1fr; gap:14rpx; }
 .deadline-pickers picker { min-width:0; }
 .deadline-pickers .picker-line { box-sizing:border-box; padding:0 14rpx; background:#fff; border:1rpx solid $color-border-light; border-radius:$radius-pill; }
@@ -474,6 +478,7 @@ export default {
 .filter-toggle text { font-size:24rpx; color:$color-text-regular; }
 .section-head { display:flex; align-items:center; justify-content:space-between; gap:20rpx; }
 .pool-count { flex-shrink:0; padding:10rpx 18rpx; border-radius:$radius-pill; font-size:24rpx; font-weight:$font-weight-bold; color:$color-primary; background:$color-primary-light; }
+.selected-empty { margin-top:18rpx; padding:24rpx; color:$color-text-light; background:$color-bg-light; border:1rpx dashed $color-border-light; border-radius:$radius-card; font-size:25rpx; line-height:1.4; text-align:center; }
 .selected-scroll { margin-top:20rpx; white-space:nowrap; }
 .selected-list { display:inline-flex; gap:16rpx; }
 .selected-item { width:190rpx; padding:14rpx; background:$color-bg-light; border:1rpx solid $color-border-light; border-radius:$radius-card; }

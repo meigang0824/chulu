@@ -39,6 +39,127 @@ function businessError(code, message) {
   return error
 }
 
+function isContentSafeResult(result = {}) {
+  const errCode = result.errCode !== undefined ? result.errCode : result.errcode
+  const detail = result.result || {}
+  if (errCode !== undefined && Number(errCode) !== 0) return false
+  return !detail.suggest || detail.suggest === 'pass'
+}
+
+function contentRejectMessage(type = '内容') {
+  return '你发布的内容含违规信息，请修改后再试'
+}
+
+function imageContentType(fileID = '') {
+  const ext = String(fileID || '').split(/[?#]/)[0].split('.').pop().toLowerCase()
+  if (ext === 'png') return 'image/png'
+  if (ext === 'gif') return 'image/gif'
+  if (ext === 'webp') return 'image/webp'
+  return 'image/jpeg'
+}
+
+async function checkTextSecurity(content = '', openid = '', type = '内容') {
+  const text = String(content || '').trim()
+  if (!text) return
+  const params = openid
+    ? { content: text, version: 2, scene: 1, openid }
+    : { content: text }
+  let result
+  try {
+    result = await cloud.openapi.security.msgSecCheck(params)
+  } catch (error) {
+    console.error('[security] msgSecCheck failed:', error)
+    throw businessError('CONTENT_SECURITY_CHECK_FAILED', '内容检测失败，请稍后重试')
+  }
+  if (!isContentSafeResult(result)) {
+    throw businessError('CONTENT_SECURITY_REJECTED', contentRejectMessage(type))
+  }
+}
+
+async function getSecurityMediaUrl(fileID = '') {
+  const id = String(fileID || '').trim()
+  if (!id) return ''
+  if (/^https?:\/\//i.test(id)) return id
+  if (id.indexOf('cloud://') !== 0) return ''
+  const { fileList = [] } = await cloud.getTempFileURL({ fileList: [id] })
+  const file = fileList[0] || {}
+  return file.tempFileURL || ''
+}
+
+async function checkMediaSecurityAsync(fileID = '', openid = '', type = '图片') {
+  if (!openid || !cloud.openapi || !cloud.openapi.security || typeof cloud.openapi.security.mediaCheckAsync !== 'function') return
+  let mediaUrl = ''
+  try {
+    mediaUrl = await getSecurityMediaUrl(fileID)
+  } catch (error) {
+    console.error('[security] get media url failed:', error)
+    throw businessError('CONTENT_SECURITY_CHECK_FAILED', '图片检测失败，请重新选择')
+  }
+  if (!mediaUrl) {
+    throw businessError('CONTENT_SECURITY_CHECK_FAILED', '图片检测失败，请重新选择')
+  }
+  let result
+  try {
+    result = await cloud.openapi.security.mediaCheckAsync({
+      mediaUrl,
+      mediaType: 2,
+      version: 2,
+      scene: 1,
+      openid
+    })
+  } catch (error) {
+    console.error('[security] mediaCheckAsync failed:', error)
+    throw businessError('CONTENT_SECURITY_CHECK_FAILED', '图片检测失败，请稍后重试')
+  }
+  if (!isContentSafeResult(result)) {
+    throw businessError('CONTENT_SECURITY_REJECTED', contentRejectMessage(type))
+  }
+}
+
+async function checkImageSecurity(fileID = '', type = '图片', openid = '') {
+  const id = String(fileID || '').trim()
+  if (!id) return
+  if (id.indexOf('cloud://') !== 0) {
+    await checkMediaSecurityAsync(id, openid, type)
+    return
+  }
+  let downloadResult
+  try {
+    downloadResult = await cloud.downloadFile({ fileID: id })
+  } catch (error) {
+    console.error('[security] download avatar failed:', error)
+    throw businessError('CONTENT_SECURITY_CHECK_FAILED', '图片检测失败，请重新选择')
+  }
+  const fileBuffer = downloadResult && downloadResult.fileContent
+  if (!fileBuffer) throw businessError('CONTENT_SECURITY_CHECK_FAILED', '图片检测失败，请重新选择')
+  let result
+  try {
+    result = await cloud.openapi.security.imgSecCheck({
+      media: {
+        contentType: imageContentType(id),
+        value: fileBuffer
+      }
+    })
+  } catch (error) {
+    console.error('[security] imgSecCheck failed:', error)
+    throw businessError('CONTENT_SECURITY_CHECK_FAILED', '图片检测失败，请稍后重试')
+  }
+  if (!isContentSafeResult(result)) {
+    throw businessError('CONTENT_SECURITY_REJECTED', contentRejectMessage(type))
+  }
+  await checkMediaSecurityAsync(id, openid, type)
+}
+
+async function removeCloudFileQuietly(fileID = '') {
+  const id = String(fileID || '').trim()
+  if (!id || id.indexOf('cloud://') !== 0) return
+  try {
+    await cloud.deleteFile({ fileList: [id] })
+  } catch (error) {
+    console.error('[security] delete rejected file failed:', error)
+  }
+}
+
 function parseTime(value) {
   if (!value) return 0
   const time = new Date(value).getTime()
@@ -63,6 +184,16 @@ function isWechatPayEnabled() {
     WECHAT_PAY_CONFIG.apiV3Key &&
     normalizePrivateKey(WECHAT_PAY_CONFIG.privateKey) &&
     WECHAT_PAY_CONFIG.notifyUrl
+  )
+}
+
+function isWechatRefundEnabled() {
+  return !!(
+    WECHAT_PAY_CONFIG.enabled &&
+    WECHAT_PAY_CONFIG.mchid &&
+    WECHAT_PAY_CONFIG.serialNo &&
+    WECHAT_PAY_CONFIG.apiV3Key &&
+    normalizePrivateKey(WECHAT_PAY_CONFIG.privateKey)
   )
 }
 
@@ -109,6 +240,12 @@ async function requestWechatPay(method, urlPath, body = null) {
     throw businessError('WECHAT_PAY_API_ERROR', message)
   }
   return data
+}
+
+function readableWechatPayError(error) {
+  const message = String(error && (error.message || error.errMsg || '') || '').trim()
+  if (!message) return '微信支付接口暂不可用'
+  return message.replace(/^微信支付请求失败[:：]?/i, '').slice(0, 120)
 }
 
 async function getWechatAccessToken() {
@@ -304,8 +441,19 @@ async function authWxLogin(payload) {
     if (!adminProfile) {
       const nextDisplayName = String(payload.displayName || payload.nickName || '').trim()
       const nextAvatar = String(payload.avatar || payload.avatarUrl || '').trim()
-      if (nextDisplayName && nextDisplayName !== a.displayName) patch.displayName = nextDisplayName
-      if (nextAvatar && nextAvatar !== a.avatar) patch.avatar = nextAvatar
+      if (nextDisplayName && nextDisplayName !== a.displayName) {
+        await checkTextSecurity(nextDisplayName, openid, '昵称')
+        patch.displayName = nextDisplayName
+      }
+      if (nextAvatar && nextAvatar !== a.avatar) {
+        try {
+          await checkImageSecurity(nextAvatar, '头像', openid)
+        } catch (error) {
+          await removeCloudFileQuietly(nextAvatar)
+          throw error
+        }
+        patch.avatar = nextAvatar
+      }
     }
     if (Object.keys(patch).length) {
       await db.collection('accounts').doc(a._id).update({ data: patch })
@@ -324,11 +472,23 @@ async function authWxLogin(payload) {
   }
 
   const newId = `wx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+  const profileDisplayName = String(payload.displayName || payload.nickName || '').trim()
   const displayName = adminProfile && adminProfile.name
     ? adminProfile.name
-    : String(payload.displayName || payload.nickName || '').trim() || `微信用户${Math.floor(Math.random() * 10000)}`
+    : profileDisplayName || `微信用户${Math.floor(Math.random() * 10000)}`
   const role = adminProfile ? adminProfile.role : DEFAULT_USER_ROLE
   const avatar = String(payload.avatar || payload.avatarUrl || '').trim()
+  if (!adminProfile && profileDisplayName) {
+    await checkTextSecurity(profileDisplayName, openid, '昵称')
+  }
+  if (!adminProfile && avatar) {
+    try {
+      await checkImageSecurity(avatar, '头像', openid)
+    } catch (error) {
+      await removeCloudFileQuietly(avatar)
+      throw error
+    }
+  }
   await db.collection('accounts').add({
     data: {
       id: newId, username: `wx_${openid.slice(-8)}`, phone: '', password: '',
@@ -399,8 +559,25 @@ async function updateProfile(authToken, payload = {}) {
   const auth = await getAccountByToken(authToken)
   if (!auth || auth.account.role === 'guest') return { ok: false, code: 'AUTH_REQUIRED', message: '请先登录后再修改资料' }
   const patch = { updatedAt: now() }
-  if (payload.displayName !== undefined) patch.displayName = String(payload.displayName || '').trim() || auth.account.displayName
-  if (payload.avatar !== undefined) patch.avatar = String(payload.avatar || '').trim()
+  if (payload.displayName !== undefined) {
+    const nextDisplayName = String(payload.displayName || '').trim() || auth.account.displayName
+    if (nextDisplayName && nextDisplayName !== auth.account.displayName) {
+      await checkTextSecurity(nextDisplayName, auth.session.openid || '', '昵称')
+    }
+    patch.displayName = nextDisplayName
+  }
+  if (payload.avatar !== undefined) {
+    const nextAvatar = String(payload.avatar || '').trim()
+    if (nextAvatar && nextAvatar !== auth.account.avatar) {
+      try {
+        await checkImageSecurity(nextAvatar, '头像', auth.session.openid || '')
+      } catch (error) {
+        await removeCloudFileQuietly(nextAvatar)
+        throw error
+      }
+    }
+    patch.avatar = nextAvatar
+  }
   if (payload.avatarText !== undefined) patch.avatarText = String(payload.avatarText || '').trim().slice(0, 2) || auth.account.avatarText
   await db.collection('accounts').doc(auth.account._id).update({ data: patch })
   const account = { ...auth.account, ...patch }
@@ -770,7 +947,7 @@ async function createOrder(body, authToken = '') {
             : 88
     const minimumOrderAmount = Number(rawMinimumOrderAmount || 0)
     if (minimumOrderAmount > 0 && productAmount < minimumOrderAmount) {
-      throw businessError('MINIMUM_ORDER_AMOUNT', `满￥${minimumOrderAmount.toFixed(2)}起下单，还差￥${(minimumOrderAmount - productAmount).toFixed(2)}`)
+      throw businessError('MINIMUM_ORDER_AMOUNT', `满￥${minimumOrderAmount.toFixed(2)}起统一配送，还差￥${(minimumOrderAmount - productAmount).toFixed(2)}`)
     }
     const deliveryFee = minimumOrderAmount > 0 ? 0 : baseDeliveryFee
     const discount = Number(body.discount || 0)
@@ -807,7 +984,7 @@ async function createOrder(body, authToken = '') {
     })
     return { ...createdOrder, payRequired: true, payment: payment.params }
   } catch (error) {
-    await rollbackPendingPaymentOrder(id)
+    await rollbackPendingPaymentOrder(id, 'paymentFailed')
     throw error
   }
 }
@@ -836,7 +1013,7 @@ async function createWechatJsapiPayment(order, openid) {
   }
 }
 
-async function rollbackPendingPaymentOrder(id) {
+async function rollbackPendingPaymentOrder(id, reason = 'paymentFailed') {
   await db.runTransaction(async transaction => {
     const res = await transaction.collection('orders').where({ id }).limit(1).get()
     if (!res.data.length) return
@@ -855,9 +1032,24 @@ async function rollbackPendingPaymentOrder(id) {
       }
     }
     await transaction.collection('orders').doc(order._id).update({
-      data: { status: 'cancelled', payStatus: 'paymentFailed', deliveryStatus: 'cancelled', cancelledAt: timestamp, updatedAt: timestamp }
+      data: { status: 'cancelled', payStatus: reason, deliveryStatus: 'cancelled', cancelledAt: timestamp, updatedAt: timestamp }
     })
   })
+}
+
+async function cancelPendingPaymentOrder(body = {}, authToken = '') {
+  const auth = await requireUserSession(authToken)
+  const id = String(body.id || body.orderId || '').trim()
+  if (!id) throw businessError('ORDER_NOT_FOUND', '订单不存在')
+  const { data: docs } = await db.collection('orders').where({ id }).limit(1).get()
+  const order = docs && docs[0]
+  if (!order) throw businessError('ORDER_NOT_FOUND', '订单不存在')
+  if (!canAccessOrder(auth, order)) throw businessError('PERMISSION_DENIED', '无权操作该订单')
+  if (order.payStatus !== 'pending' || order.status !== 'pendingPayment') {
+    return getOrder(id, authToken)
+  }
+  await rollbackPendingPaymentOrder(id, 'paymentCancelled')
+  return getOrder(id, authToken)
 }
 
 async function queryWechatPayment(orderId) {
@@ -906,13 +1098,19 @@ async function syncPaymentStatus(id, authToken = '') {
 }
 
 async function requestWechatRefund(order = {}, refundNo = '', amount = 0, reason = '') {
-  if (!isWechatPayEnabled() || order.paymentMode !== 'wechatPay') {
+  if (order.paymentMode !== 'wechatPay') {
     return { mode: order.paymentMode || 'mock', refundId: '', status: 'accepted' }
+  }
+  if (!isWechatRefundEnabled()) {
+    throw businessError('WECHAT_PAY_CONFIG_MISSING', '微信退款配置不完整，请检查商户号、证书序列号、APIv3密钥和商户私钥')
   }
   const refundAmount = amountToFen(amount || order.payable || order.amount)
   const totalAmount = amountToFen(order.payable || order.amount)
+  if (refundAmount > totalAmount) {
+    throw businessError('REFUND_AMOUNT_INVALID', `退款金额不能超过订单实付金额￥${(totalAmount / 100).toFixed(2)}`)
+  }
+  if (!refundNo) throw businessError('REFUND_NO_REQUIRED', '退款编号不能为空')
   const body = {
-    out_trade_no: order.id || order.orderNo,
     out_refund_no: refundNo,
     reason: String(reason || '订单退款').slice(0, 80),
     amount: {
@@ -921,13 +1119,52 @@ async function requestWechatRefund(order = {}, refundNo = '', amount = 0, reason
       currency: 'CNY'
     }
   }
-  const result = await requestWechatPay('POST', '/v3/refund/domestic/refunds', body)
+  if (order.transactionId) {
+    body.transaction_id = order.transactionId
+  } else {
+    body.out_trade_no = order.id || order.orderNo
+  }
+  let result = null
+  try {
+    result = await requestWechatPay('POST', '/v3/refund/domestic/refunds', body)
+  } catch (error) {
+    throw businessError('WECHAT_REFUND_FAILED', `微信退款失败：${readableWechatPayError(error)}`)
+  }
   return {
     mode: 'wechatPay',
     refundId: result.refund_id || '',
     status: result.status || 'PROCESSING',
     raw: result
   }
+}
+
+async function recordRefundFailure(order = {}, error) {
+  const orderId = order.id || order.orderNo || ''
+  const message = String(error && error.message || '微信退款失败，请检查商户支付配置').slice(0, 160)
+  const timestamp = now()
+  if (order && order._id) {
+    await db.collection('orders').doc(order._id).update({
+      data: {
+        refundError: message,
+        refundErrorAt: timestamp,
+        updatedAt: timestamp
+      }
+    })
+  }
+  const refundQuery = order.refundNo
+    ? _.or([{ orderId }, { refundNo: order.refundNo }])
+    : { orderId }
+  const { data: refunds } = await db.collection('refunds').where(refundQuery).limit(1000).get()
+  for (const refund of refunds || []) {
+    await db.collection('refunds').doc(refund._id).update({
+      data: {
+        refundError: message,
+        refundErrorAt: timestamp,
+        updatedAt: timestamp
+      }
+    })
+  }
+  return message
 }
 
 async function rollbackOrderStock(transaction, order, timestamp) {
@@ -1062,13 +1299,20 @@ async function updateRefundStatus(body = {}, authToken = '') {
   const refundAmount = Number(order.refundAmount || order.payable || order.amount || 0)
   let wechatRefund = null
   if (status === 'approved' && refundAmount > 0 && order.payStatus === 'paid') {
-    wechatRefund = await requestWechatRefund(order, order.refundNo || `rf${Date.now()}`, refundAmount, order.refundReasonText || '订单退款')
+    try {
+      wechatRefund = await requestWechatRefund(order, order.refundNo || `rf${Date.now()}`, refundAmount, order.refundReasonText || '订单退款')
+    } catch (error) {
+      const message = await recordRefundFailure(order, error)
+      throw businessError(error.code || 'WECHAT_REFUND_FAILED', message)
+    }
   }
 
   const updateData = {
     refundStatus: status,
     refundHandledAt: now(),
     refundHandleRemark: body.remark || '',
+    refundError: '',
+    refundErrorAt: '',
     updatedAt: now()
   }
   if (status === 'approved') {
@@ -1120,38 +1364,51 @@ async function updateRefundStatus(body = {}, authToken = '') {
   return await getOrder(orderId, authToken)
 }
 
-// ==================== 评价 ====================
-async function submitReview(authToken, body = {}) {
-  const auth = await getAccountByToken(authToken)
-  if (!auth || auth.account.role === 'guest') return { ok: false, code: 'AUTH_REQUIRED', message: '请先登录后再评价' }
+async function cancelRefundRequest(body = {}, authToken = '') {
+  const auth = await requireUserSession(authToken)
   const orderId = String(body.orderId || '').trim()
-  if (!orderId) return { ok: false, code: 'VALIDATION_ERROR', message: '订单编号不能为空' }
-  const content = String(body.content || '').trim()
-  if (!content) return { ok: false, code: 'VALIDATION_ERROR', message: '请填写评价内容' }
-  const rating = Math.min(5, Math.max(1, Number(body.rating || 5)))
+  if (!orderId) throw new Error('订单编号不能为空')
   const { data: orders } = await db.collection('orders').where({ id: orderId }).limit(1).get()
-  if (!orders.length) return { ok: false, code: 'ORDER_NOT_FOUND', message: '订单不存在' }
-  const order = orders[0]
-  if (order.buyerId && order.buyerId !== auth.account.id && !isAdmin(auth.account.role)) {
-    return { ok: false, code: 'PERMISSION_DENIED', message: '无权评价该订单' }
+  const order = orders && orders[0]
+  if (!order) throw new Error('订单不存在')
+  if (!canAccessOrder(auth, order)) throw businessError('PERMISSION_DENIED', '无权操作该订单')
+  if (order.buyerId !== auth.account.id) {
+    throw businessError('PERMISSION_DENIED', '只能撤回自己的售后申请')
   }
-  const reviewId = `rv${Date.now()}`
-  const doc = {
-    id: reviewId,
-    orderId,
-    buyerId: auth.account.id,
-    rating,
-    tags: Array.isArray(body.tags) ? body.tags.slice(0, 8) : [],
-    content,
-    status: 'published',
-    createdAt: now(),
-    updatedAt: now()
+  if (order.refundStatus !== 'pending') throw new Error('当前没有可撤回的售后申请')
+
+  const timestamp = now()
+  const refundQuery = order.refundNo
+    ? _.or([{ orderId }, { refundNo: order.refundNo }])
+    : { orderId }
+  const { data: refunds } = await db.collection('refunds').where(refundQuery).limit(1000).get()
+  for (const refund of refunds || []) {
+    await db.collection('refunds').doc(refund._id).update({
+      data: {
+        status: 'cancelled',
+        cancelledAt: timestamp,
+        cancelReason: body.reason || '用户撤回售后申请',
+        updatedAt: timestamp
+      }
+    })
   }
-  await db.collection('reviews').add({ data: doc })
+
   await db.collection('orders').doc(order._id).update({
-    data: { reviewed: true, reviewId, reviewedAt: now(), updatedAt: now() }
+    data: {
+      refundStatus: '',
+      refundType: '',
+      refundNo: '',
+      refundAmount: 0,
+      refundReasonText: '',
+      refundHandleRemark: '',
+      refundHandledAt: '',
+      refundError: '',
+      refundErrorAt: '',
+      refundCancelledAt: timestamp,
+      updatedAt: timestamp
+    }
   })
-  return { ok: true, data: doc }
+  return await getOrder(orderId, authToken)
 }
 
 // ==================== 团购 ====================
@@ -1429,6 +1686,7 @@ async function getAdminSubscriptionStatus(authToken) {
   const openid = auth.session.openid || ''
   let orderSubscription = null
   let afterSalesSubscription = null
+  let enabledSubscriptions = []
   if (openid && (orderTemplateId || afterSalesTemplateId)) {
     const { data } = await db.collection('adminSubscriptions')
       .where({ openid, status: 'enabled' })
@@ -1437,15 +1695,38 @@ async function getAdminSubscriptionStatus(authToken) {
     orderSubscription = (data || []).find(item => item.type === 'order' && item.templateId === orderTemplateId)
     afterSalesSubscription = (data || []).find(item => item.type === 'afterSales' && item.templateId === afterSalesTemplateId)
   }
+  if (orderTemplateId || afterSalesTemplateId) {
+    const { data } = await db.collection('adminSubscriptions')
+      .where({ status: 'enabled' })
+      .limit(1000)
+      .get()
+    enabledSubscriptions = (data || []).filter(item => {
+      if (item.type === 'order') return item.templateId === orderTemplateId
+      if (item.type === 'afterSales') return item.templateId === afterSalesTemplateId
+      return false
+    })
+  }
+  const enabledAdminMap = {}
+  enabledSubscriptions.forEach(item => {
+    const key = item.openid || item.accountId || item.adminName
+    if (!key) return
+    enabledAdminMap[key] = item.adminName || '店长'
+  })
+  const enabledAdminNames = Object.values(enabledAdminMap)
   return {
     enabled: !!(orderSubscription || afterSalesSubscription),
     orderEnabled: !!orderSubscription,
     afterSalesEnabled: !!afterSalesSubscription,
+    enabledCount: [orderSubscription, afterSalesSubscription].filter(Boolean).length,
     orderTemplateId,
     afterSalesTemplateId,
     templateId: afterSalesTemplateId,
     openidBound: !!openid,
-    updatedAt: (orderSubscription || afterSalesSubscription || {}).updatedAt || ''
+    adminName: (orderSubscription || afterSalesSubscription || {}).adminName || auth.account.displayName || auth.account.username || '店长',
+    updatedAt: (orderSubscription || afterSalesSubscription || {}).updatedAt || '',
+    configuredTemplateCount: [orderTemplateId, afterSalesTemplateId].filter(Boolean).length,
+    enabledAdminCount: enabledAdminNames.length,
+    enabledAdminNames
   }
 }
 
@@ -1807,10 +2088,10 @@ exports.main = async (event, context) => {
       case 'updateOrder': await requireAdminSession(authToken); return { ok: true, data: await updateOrder(payload.id, payload) }
       case 'updateOrderStatus': return { ok: true, data: await updateOrderStatus(payload.id, payload.status, authToken) }
       case 'syncPaymentStatus': return { ok: true, data: await syncPaymentStatus(payload.id, authToken) }
+      case 'cancelPendingPaymentOrder': return { ok: true, data: await cancelPendingPaymentOrder(payload, authToken) }
       case 'createRefund': return { ok: true, data: await createRefund(payload, authToken) }
       case 'updateRefundStatus': return { ok: true, data: await updateRefundStatus(payload, authToken) }
-      case 'submitReview': return await submitReview(authToken, payload)
-      case 'createReview': return await submitReview(authToken, payload)
+      case 'cancelRefundRequest': return { ok: true, data: await cancelRefundRequest(payload, authToken) }
 
       // 团购
       case 'listGroups': return { ok: true, data: await listGroups(payload, authToken) }

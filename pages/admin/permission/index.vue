@@ -76,6 +76,7 @@ import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import { accountAPI } from '@/services/apiClient'
 import { ensurePageAccess, getAuthSession } from '@/utils/auth'
 import { resolveImageUrl } from '@/utils/image'
+import { showCloudError } from '@/utils/apiError'
 
 export default {
   components: { CustomNavBar, AppIcon, EmptyState },
@@ -127,7 +128,7 @@ export default {
           avatarDisplay: item.avatar ? await resolveImageUrl(item.avatar, item.avatar) : ''
         })))
       } catch (error) {
-        uni.showToast({ title: error.message || '用户列表加载失败', icon: 'none' })
+        showCloudError(error)
       } finally {
         this.loading = false
       }
@@ -169,7 +170,7 @@ export default {
           : account)
         uni.showToast({ title: role === 'manager' ? '已设为店长' : '已设为普通用户', icon: 'success' })
       } catch (error) {
-        uni.showToast({ title: error.message || '权限修改失败', icon: 'none' })
+        showCloudError(error)
       } finally {
         this.savingId = ''
       }

@@ -17,7 +17,6 @@ const LOGIN_REQUIRED = [
   '/pages/order/refund/index',
   '/pages/address/list/index',
   '/pages/address/edit/index',
-  '/pages/order/review/index',
 ]
 
 let guardsInstalled = false
@@ -234,7 +233,7 @@ export async function requestPasswordReset(identifier) {
 /**
  * 页面权限规则：
  * - public:  任何人可访问（首页、分类、商品详情、登录页、订单列表、个人中心、关于门店）
- * - login:   需要正式登录（订单确认、订单成功、地址管理、评价）
+ * - login:   需要正式登录（订单确认、订单成功、地址管理）
  * - admin:   需要管理员权限（/pages/admin/*）
  */
 export function getAccessRequirement(url = '') {

@@ -103,12 +103,6 @@
       }
     },
     {
-      "path": "pages/order/review/index",
-      "style": {
-        "navigationStyle": "custom"
-      }
-    },
-    {
       "path": "pages/activity/list/index",
       "style": {
         "navigationStyle": "custom"

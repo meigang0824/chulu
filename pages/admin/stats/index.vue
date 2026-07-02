@@ -70,7 +70,7 @@
       <EmptyState
         v-if="!topProducts.length"
         title="暂无热销数据"
-        desc="当前时间范围内还没有有效订单。"
+        desc="当前时间范围内还没有有效订单，可切换到近7天/全部时间，或确认今天是否已经成单。"
       />
     </view>
   </view>
@@ -82,6 +82,7 @@ import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import { getAdminStatsData } from '@/services/dataService'
 import { ensurePageAccess } from '@/utils/auth'
 import { money } from '@/utils/format'
+import { showCloudError } from '@/utils/apiError'
 
 function formatDate(date = new Date()) {
   const y = date.getFullYear()
@@ -147,7 +148,7 @@ export default {
         this.statusStats = data.statusStats
         this.topProducts = data.topProducts
       } catch (error) {
-        uni.showToast({ title: error.message || '统计加载失败', icon: 'none' })
+        showCloudError(error)
       } finally {
         this.loading = false
       }

@@ -53,6 +53,7 @@
         :cart-max="itemMax(item)"
         :show-deadline="!!item.deadline"
         show-desc
+        show-share
         @tap="goDetail"
         @cart-increase="increaseCart"
         @cart-decrease="decreaseCart"
@@ -112,7 +113,17 @@ export default {
   beforeDestroy() {
     uni.$off('buyer:category-clear-group', this.clearGroupFilter)
   },
-  onShareAppMessage() {
+  onShareAppMessage(options = {}) {
+    const dataset = options && options.target && options.target.dataset ? options.target.dataset : {}
+    const sharedProductId = dataset.productId || ''
+    if (sharedProductId) {
+      const product = this.products.find(item => this.productId(item) === sharedProductId) || {}
+      return {
+        title: product.name ? `${product.name} · 初炉团购` : '初炉新鲜烘焙',
+        path: `/pages/product/detail?id=${sharedProductId}`,
+        imageUrl: this.shareProductImage(product)
+      }
+    }
     if (this.groupId) {
       return {
         title: this.groupTitle ? `${this.groupTitle} · 初炉团购` : '初炉今日团购',
@@ -149,6 +160,11 @@ export default {
     }
   },
   methods: {
+    shareProductImage(product = {}) {
+      const image = product.bannerImage || product.image || product.imageFileID || product.bannerImageFileID || ''
+      if (String(image).startsWith('cloud://')) return cloudImageHttpsUrl(image) || image
+      return image || this.shareCoverImage()
+    },
     shareCoverImage() {
       const product = (this.products && this.products[0]) || {}
       const image = product.bannerImage || product.image || product.imageFileID || product.bannerImageFileID || ''
@@ -215,10 +231,11 @@ export default {
       this.loadPageData()
     },
     goDetail(product) {
-      if (product && product.id) {
-        uni.setStorageSync(`buyer_product_context_${product.id}`, product)
-      }
-      uni.navigateTo({ url: `/pages/product/detail?id=${product.id}` })
+      const id = product && (product.productId || product.id || product._id)
+      if (!id) return
+      uni.setStorageSync(`buyer_product_context_${id}`, product)
+      if (product.id && product.id !== id) uni.setStorageSync(`buyer_product_context_${product.id}`, product)
+      uni.navigateTo({ url: `/pages/product/detail?id=${id}` })
     }
   }
 }

@@ -100,6 +100,7 @@ import { getRoleHome, isAdminRole, loginWithWechat, redirectLoggedInFromLogin, l
 import { setPortalMode } from '@/services/dataService'
 import { cloudImage, resolveImageUrl, uploadImageToCloud } from '@/utils/image'
 import { callFunction } from '@/services/apiClient'
+import { normalizeCloudError } from '@/utils/apiError'
 
 export default {
   data() {
@@ -294,6 +295,11 @@ export default {
     },
     handleWechatLoginError(error) {
       console.error('微信登录失败:', error)
+      const normalized = normalizeCloudError(error)
+      if (normalized.code && String(normalized.code).indexOf('CONTENT_SECURITY') === 0) {
+        this.errorText = normalized.message
+        return
+      }
       if (error.message && error.message.includes('小程序环境')) {
         this.errorText = '微信登录需要在微信小程序环境中运行'
       } else if (error.message && error.message.includes('微信授权码')) {

@@ -97,8 +97,8 @@ export default {
     },
     checkoutTip() {
       if (!this.minimumOrderAmount) return ''
-      if (this.canCheckout) return `已满 ￥${money(this.minimumOrderAmount)}，可下单发货`
-      return `满 ￥${money(this.minimumOrderAmount)} 起下单，还差 ￥${money(this.amountMissing)}`
+      if (this.canCheckout) return `已满 ￥${money(this.minimumOrderAmount)}，可统一配送`
+      return `满 ￥${money(this.minimumOrderAmount)} 起统一配送，还差 ￥${money(this.amountMissing)}`
     }
   },
   methods: {
@@ -114,15 +114,64 @@ export default {
     async loadCart() {
       const items = getCartItems()
       this.items = items
-      const resolved = await Promise.all(items.map(async item => {
-        const imageFileID = item.imageFileID || item.image
+      let removedCount = 0
+      let adjustedCount = 0
+      const resolved = (await Promise.all(items.map(async item => {
+        const id = item.productId || item.id
+        let product = null
+        let loadFailed = false
+        if (id) {
+          try {
+            product = await getProductById(id)
+          } catch {
+            loadFailed = true
+          }
+        }
+        if (!id || loadFailed) {
+          const imageFileID = item.imageFileID || item.image
+          return {
+            ...item,
+            image: await resolveImageUrl(imageFileID, IMAGE_ASSETS.product),
+            imageFileID
+          }
+        }
+        if (!product) {
+          removedCount += 1
+          return null
+        }
+        const stock = Number(product.stock || 0)
+        const limit = Number(product.limit || 0)
+        const max = this.itemMax({ stock, limit })
+        if ((product.status && product.status !== 'active') || max <= 0) {
+          removedCount += 1
+          return null
+        }
+        const currentCount = Number(item.count || 1)
+        const count = Math.min(Math.max(1, currentCount), max)
+        if (count !== currentCount) adjustedCount += 1
         return {
           ...item,
-          image: await resolveImageUrl(imageFileID, IMAGE_ASSETS.product),
-          imageFileID
+          id: product.id || product._id || id,
+          productId: product.id || product._id || id,
+          name: product.name || item.name || '',
+          desc: product.desc || item.desc || '',
+          price: Number(product.price || item.price || 0),
+          originPrice: Number(product.originPrice || item.originPrice || 0),
+          image: product.image || await resolveImageUrl(product.imageFileID || item.imageFileID || item.image, IMAGE_ASSETS.product),
+          imageFileID: product.imageFileID || product.image || item.imageFileID || item.image,
+          stock,
+          limit,
+          count
         }
-      }))
+      }))).filter(Boolean)
       this.items = resolved
+      if (removedCount || adjustedCount) {
+        saveCartItems(resolved)
+        uni.showToast({
+          title: removedCount ? '已移除不可购买商品' : '已同步最新库存',
+          icon: 'none'
+        })
+      }
     },
     async repairItemImage(item) {
       const id = item.productId || item.id
@@ -142,7 +191,9 @@ export default {
     },
     itemMax(item) {
       const limit = Number(item.limit || 0)
-      return limit > 0 ? limit : 99
+      const limitMax = limit > 0 ? limit : 99
+      const stock = Number(item.stock || 0)
+      return stock > 0 ? Math.min(limitMax, stock) : 0
     },
     itemLimitText(item) {
       const limit = Number(item.limit || 0)
@@ -173,7 +224,7 @@ export default {
     checkout() {
       if (!requireLogin('结算前请先登录')) return
       if (!this.canCheckout) {
-        uni.showToast({ title: `满￥${money(this.minimumOrderAmount)}起下单`, icon: 'none' })
+        uni.showToast({ title: `满￥${money(this.minimumOrderAmount)}起统一配送`, icon: 'none' })
         return
       }
       setCheckoutItems(this.items)
@@ -189,7 +240,7 @@ export default {
 <style lang="scss" scoped>
 @import '@/common/theme.scss';
 
-.cart-page { padding-bottom: 300rpx; }
+.cart-page { padding-bottom: 330rpx; }
 .cart-list { margin-top: 20rpx; }
 .cart-item { position: relative; display: flex; gap: 18rpx; margin-top: 18rpx; padding: 20rpx; }
 .cart-item__image { flex-shrink: 0; width: 150rpx; height: 150rpx; border-radius: 22rpx; background: $color-bg-deep; }

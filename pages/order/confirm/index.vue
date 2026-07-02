@@ -22,9 +22,12 @@
       </view>
     </view>
 
-    <view class="line-card line-card--readonly">
-      <view>配送时间</view>
-      <text>{{ checkoutText.deliveryTime }}</text>
+    <view class="delivery-note card">
+      <view class="delivery-note__icon">送</view>
+      <view class="delivery-note__main">
+        <view>统一配送</view>
+        <text>{{ checkoutText.deliveryTime }}</text>
+      </view>
     </view>
     <view class="line-card" @tap="editNote">
       <view>订单备注</view>
@@ -68,7 +71,7 @@ import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import AddressCard from '@/components/AddressCard/AddressCard.vue'
 import StatusTag from '@/components/StatusTag/StatusTag.vue'
 import { calcOrderAmount } from '@/utils/calc'
-import { createOrder, getDefaultAddress, getProductById, getShopConfig, syncPaymentStatus } from '@/services/dataService'
+import { cancelPendingPaymentOrder, createOrder, getDefaultAddress, getProductById, getShopConfig, syncPaymentStatus } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess, requireLogin } from '@/utils/auth'
 import { clearCheckoutItems, getCheckoutItems, removeCartItems } from '@/utils/shopState'
@@ -109,9 +112,11 @@ export default {
       return this.cleanText(itemTime || this.checkout.deliveryTime, '次日打包发货')
     },
     stepperMax() {
-      if (Number(this.product && this.product.stock) <= 0) return 0
+      const stock = Number(this.product && this.product.stock)
+      if (stock <= 0) return 0
       const limit = Number(this.product && this.product.limit)
-      return limit > 0 ? limit : 99
+      const limitMax = limit > 0 ? limit : 99
+      return Math.min(limitMax, stock)
     },
     addressReady() {
       return Boolean(this.address && this.address.receiver && this.address.address)
@@ -124,12 +129,12 @@ export default {
     },
     minimumOrderTip() {
       if (!this.minimumOrderAmount) return ''
-      if (this.orderAmountReady) return `已满 ￥${this.money(this.minimumOrderAmount)}，可下单发货`
-      return `满 ￥${this.money(this.minimumOrderAmount)} 起下单，还差 ￥${this.money(this.amount.minimumOrderMissing)}`
+      if (this.orderAmountReady) return `已满 ￥${this.money(this.minimumOrderAmount)}，可统一配送`
+      return `满 ￥${this.money(this.minimumOrderAmount)} 起统一配送，还差 ￥${this.money(this.amount.minimumOrderMissing)}`
     },
     payButtonText() {
       if (!this.addressReady) return '选择地址后下单'
-      if (!this.orderAmountReady) return `满￥${this.money(this.minimumOrderAmount)}起下单`
+      if (!this.orderAmountReady) return `满￥${this.money(this.minimumOrderAmount)}起统一配送`
       return this.checkoutText.payText
     }
   },
@@ -248,7 +253,7 @@ export default {
         return
       }
       if (!this.orderAmountReady) {
-        uni.showToast({ title: `满￥${this.money(this.minimumOrderAmount)}起下单`, icon: 'none' })
+        uni.showToast({ title: `满￥${this.money(this.minimumOrderAmount)}起统一配送`, icon: 'none' })
         return
       }
       try {
@@ -277,14 +282,23 @@ export default {
         })
         if (!result || !result.id) {
           uni.hideLoading()
-          uni.showToast({ title: '下单失败', icon: 'none' })
+          uni.showToast({ title: '订单创建异常，请重试', icon: 'none' })
           return
         }
         if (result.payRequired && result.payment) {
+          const pendingOrderId = result.id || result.orderNo
           uni.hideLoading()
-          await this.requestWechatPayment(result.payment)
+          try {
+            await this.requestWechatPayment(result.payment)
+          } catch (paymentError) {
+            if (String(paymentError && paymentError.errMsg || '').includes('cancel')) {
+              await this.closePendingPaymentOrder(pendingOrderId)
+              return
+            }
+            throw paymentError
+          }
           uni.showLoading({ title: '确认支付中' })
-          const paidOrder = await syncPaymentStatus(result.id || result.orderNo)
+          const paidOrder = await syncPaymentStatus(pendingOrderId)
           uni.hideLoading()
           if (!paidOrder || paidOrder.payStatus !== 'paid') {
             uni.showToast({ title: '支付确认中，请稍后查看订单', icon: 'none' })
@@ -305,6 +319,26 @@ export default {
         }
         showCloudError(error)
       }
+    },
+    async closePendingPaymentOrder(orderId) {
+      if (!orderId) {
+        uni.showToast({ title: '支付已取消', icon: 'none' })
+        return
+      }
+      try {
+        uni.showLoading({ title: '正在关闭订单' })
+        await cancelPendingPaymentOrder(orderId)
+        uni.hideLoading()
+        uni.showToast({ title: '支付已取消，库存已释放', icon: 'none' })
+      } catch (error) {
+        uni.hideLoading()
+        uni.showModal({
+          title: '支付已取消',
+          content: '订单状态同步失败，请稍后在我的订单中查看；如仍显示待支付，可联系店长处理。',
+          showCancel: false,
+          confirmText: '知道了'
+        })
+      }
     }
   }
 }
@@ -314,7 +348,7 @@ export default {
 @import '@/common/theme.scss';
 
 .confirm {
-  padding-bottom: 190rpx;
+  padding-bottom: 230rpx;
 }
 
 .confirm__address,
@@ -404,6 +438,46 @@ export default {
 
 .line-card {
   margin-top: 22rpx;
+}
+
+.delivery-note {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin-top: 22rpx;
+  padding: 24rpx 28rpx;
+}
+
+.delivery-note__icon {
+  @include flex-center;
+  flex-shrink: 0;
+  width: 58rpx;
+  height: 58rpx;
+  color: #fff;
+  background: $gradient-primary;
+  border-radius: 50%;
+  font-size: 24rpx;
+  font-weight: $font-weight-heavy;
+  box-shadow: 0 8rpx 18rpx rgba(255, 92, 114, 0.14);
+}
+
+.delivery-note__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.delivery-note__main view {
+  color: $color-text-main;
+  font-size: 28rpx;
+  font-weight: $font-weight-heavy;
+}
+
+.delivery-note__main text {
+  display: block;
+  margin-top: 6rpx;
+  color: $color-text-regular;
+  font-size: 25rpx;
+  line-height: 1.35;
 }
 
 .line-card view {

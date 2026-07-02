@@ -15,6 +15,12 @@ function displayImage(value, fallback = IMAGE_ASSETS.product) {
   return normalizeImageUrl(value, fallback)
 }
 
+function itemMax(limit = 0, stock = 0) {
+  const limitMax = Number(limit || 0) > 0 ? Number(limit || 0) : 99
+  const stockMax = Number(stock || 0) > 0 ? Number(stock || 0) : 0
+  return stockMax > 0 ? Math.min(limitMax, stockMax) : 0
+}
+
 export function syncCartBadge(items = getCartItems()) {
   try {
     const count = countItems(items)
@@ -58,8 +64,9 @@ export function addCartItem(product = {}, count = 1) {
   const index = items.findIndex(item => item.id === id)
   const rawLimit = Number(product.limit || 0)
   const stock = Number(product.stock || 0)
-  const max = rawLimit > 0 ? rawLimit : 99
+  const max = itemMax(rawLimit, stock)
   const nextCount = Math.max(1, Number(count || 1))
+  if (max <= 0) return saveCartItems(items)
   const imageFileID = normalizeImageUrl(product.imageFileID || product.image, IMAGE_ASSETS.product)
   const image = displayImage(product.image || product.imageFileID || imageFileID)
   if (index >= 0) {
@@ -100,9 +107,10 @@ export function updateCartItemCount(id, count) {
   const items = getCartItems().map(item => {
     if (item.id !== id) return item
     const rawLimit = Number(item.limit || 0)
-    const max = rawLimit > 0 ? rawLimit : 99
+    const max = itemMax(rawLimit, item.stock)
+    if (max <= 0) return { ...item, count: 0 }
     return { ...item, count: Math.min(max, Math.max(1, Number(count || 1))) }
-  })
+  }).filter(item => Number(item.count || 0) > 0)
   return saveCartItems(items)
 }
 

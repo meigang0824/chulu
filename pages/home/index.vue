@@ -69,9 +69,18 @@
           <view class="group-card__head">
             <view class="group-card__copy">
               <view class="group-card__title">{{ group.title }}</view>
-              <view class="group-card__subtitle">
-                <text>{{ group.productCount }} 款商品</text>
-                <text>{{ group.participantCount }} 人跟团</text>
+              <view class="group-card__metrics">
+                <view class="group-card__metric">
+                  <text>{{ group.productCount }}</text>
+                  <view>款商品</view>
+                </view>
+                <view class="group-card__metric group-card__metric--hot">
+                  <text>{{ group.participantCount || 0 }}</text>
+                  <view>人跟团</view>
+                </view>
+                <view v-if="group.deadline" class="group-card__deadline">
+                  {{ group.deadline }}
+                </view>
               </view>
             </view>
             <view class="group-card__actions">
@@ -81,10 +90,10 @@
                 :data-group-id="group.id"
                 :data-group-title="group.title"
               >
-                <AppIcon name="wechat" :size="28" color="#18BF61" />
+                <AppIcon name="wechat" :size="28" color="#FF5C72" />
                 <text>分享</text>
               </button>
-              <view class="section__more group-card__more" @tap="goCategory(group)">去跟团 〉</view>
+              <view class="section__more group-card__more" @tap="goCategory(group)">去跟团</view>
             </view>
           </view>
           <scroll-view class="product-list-scroll" scroll-x show-scrollbar="false">
@@ -296,10 +305,11 @@ export default {
       }
     },
     goDetail(product) {
-      if (product && product.id) {
-        uni.setStorageSync(`buyer_product_context_${product.id}`, product)
-      }
-      uni.navigateTo({ url: `/pages/product/detail?id=${product.id}` })
+      const id = product && (product.productId || product.id || product._id)
+      if (!id) return
+      uni.setStorageSync(`buyer_product_context_${id}`, product)
+      if (product.id && product.id !== id) uni.setStorageSync(`buyer_product_context_${product.id}`, product)
+      uni.navigateTo({ url: `/pages/product/detail?id=${id}` })
     },
     handleBannerChange(event) {
       this.bannerIndex = event.detail.current || 0
@@ -315,7 +325,10 @@ export default {
         return
       }
       if (route.indexOf('/pages/category/index') === 0 || route.indexOf('pages/category/index') === 0) {
-        uni.removeStorageSync('buyer_selected_group_id')
+        const match = String(route).match(/[?&]groupId=([^&]+)/)
+        const groupId = match && match[1] ? decodeURIComponent(match[1]) : ''
+        if (groupId) uni.setStorageSync('buyer_selected_group_id', groupId)
+        else uni.removeStorageSync('buyer_selected_group_id')
         uni.switchTab({ url: '/pages/category/index' })
         return
       }
@@ -593,19 +606,69 @@ export default {
   white-space: nowrap;
 }
 
-.group-card__subtitle {
+.group-card__metrics {
   display: flex;
   align-items: center;
-  gap: 12rpx;
-  margin-top: 8rpx;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 12rpx;
   color: $color-text-light;
   font-size: 22rpx;
   line-height: 1.2;
 }
 
-.group-card__subtitle text + text {
+.group-card__metric {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  height: 42rpx;
+  padding: 0 12rpx;
+  color: $color-text-regular;
+  background: $color-bg-light;
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-pill;
+}
+
+.group-card__metric text {
+  color: $color-text-main;
+  font-size: 26rpx;
+  font-weight: $font-weight-heavy;
+  line-height: 1;
+}
+
+.group-card__metric view {
+  font-size: 20rpx;
+  line-height: 1;
+}
+
+.group-card__metric--hot {
+  color: $color-primary;
+  background: $color-primary-light;
+  border-color: rgba(255, 92, 114, 0.16);
+}
+
+.group-card__metric--hot text {
+  color: $color-primary;
+}
+
+.group-card__metrics text + text {
   color: $color-text-regular;
   font-weight: $font-weight-semibold;
+}
+
+.group-card__deadline {
+  max-width: 260rpx;
+  height: 42rpx;
+  padding: 0 14rpx;
+  color: $color-primary !important;
+  background: $color-primary-light;
+  border-radius: $radius-pill;
+  font-weight: $font-weight-semibold;
+  line-height: 42rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group-card__actions {
@@ -624,9 +687,9 @@ export default {
   height: 42rpx;
   margin: 0;
   padding: 0;
-  color: #18BF61;
-  background: #fff;
-  border: 1rpx solid rgba(24, 191, 97, 0.35);
+  color: $color-primary;
+  background: $color-primary-light;
+  border: 1rpx solid rgba(255, 92, 114, 0.22);
   border-radius: $radius-pill;
   font-size: 22rpx;
   font-weight: $font-weight-semibold;

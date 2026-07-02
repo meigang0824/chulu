@@ -7,6 +7,13 @@
  * 调用 businessApi 云函数
  */
 const CLOUD_FUNCTION_TIMEOUT = 10000
+const CLOUD_FUNCTION_TIMEOUTS = {
+  authWxLogin: 20000,
+  createOrder: 30000,
+  syncPaymentStatus: 20000,
+  updateProfile: 30000,
+  updateRefundStatus: 30000
+}
 
 function cloudTimeout(action) {
   const error = new Error('请求超时，请稍后重试')
@@ -17,8 +24,9 @@ function cloudTimeout(action) {
 
 function withTimeout(promise, action) {
   let timer = null
+  const timeoutMs = CLOUD_FUNCTION_TIMEOUTS[action] || CLOUD_FUNCTION_TIMEOUT
   const timeout = new Promise((resolve, reject) => {
-    timer = setTimeout(() => reject(cloudTimeout(action)), CLOUD_FUNCTION_TIMEOUT)
+    timer = setTimeout(() => reject(cloudTimeout(action)), timeoutMs)
   })
   return Promise.race([promise, timeout]).finally(() => {
     if (timer) clearTimeout(timer)
@@ -60,8 +68,10 @@ export const orderAPI = {
   update: (id, data, authToken = '') => callBusinessApi('updateOrder', { id, ...data }, authToken),
   updateStatus: (id, status, authToken = '') => callBusinessApi('updateOrderStatus', { id, status }, authToken),
   syncPaymentStatus: (id, authToken = '') => callBusinessApi('syncPaymentStatus', { id }, authToken),
+  cancelPendingPayment: (id, authToken = '') => callBusinessApi('cancelPendingPaymentOrder', { id }, authToken),
   createRefund: (data, authToken = '') => callBusinessApi('createRefund', data, authToken),
   updateRefundStatus: (data, authToken = '') => callBusinessApi('updateRefundStatus', data, authToken),
+  cancelRefundRequest: (data, authToken = '') => callBusinessApi('cancelRefundRequest', data, authToken),
 }
 
 // ==================== 团购 ====================

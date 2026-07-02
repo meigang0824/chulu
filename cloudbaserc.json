@@ -5,7 +5,7 @@
   "functions": [
     {
       "name": "businessApi",
-      "timeout": 15,
+      "timeout": 30,
       "runtime": "Nodejs18.15",
       "memorySize": 256,
       "handler": "index.main"

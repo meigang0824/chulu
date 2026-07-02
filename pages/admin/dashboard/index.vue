@@ -33,7 +33,6 @@
           </view>
           <view class="quick-card__title">{{ item.title }}</view>
         </view>
-        <view class="quick-card__desc">{{ item.desc }}</view>
         <view v-if="item.badge" class="quick-card__badge">{{ item.badge }}</view>
       </view>
     </view>
@@ -55,7 +54,7 @@
               <view class="dashboard-group__title">{{ group.title }}</view>
               <view class="dashboard-group__subtitle">
                 <text>{{ group.productCount }} 款商品</text>
-                <text>{{ group.deadline || '未设置截单' }}</text>
+                <text class="dashboard-group__deadline">{{ group.deadline || '未设置截单' }}</text>
               </view>
             </view>
             <view class="dashboard-group__actions">
@@ -65,7 +64,7 @@
                 :data-group-id="group.id"
                 :data-group-title="group.title"
               >
-                <AppIcon name="wechat" :size="26" color="#18BF61" />
+                <AppIcon name="wechat" :size="26" color="#FF5C72" />
                 <text>分享</text>
               </button>
               <button class="dashboard-group__manage" @tap="goGroup(group)">管理</button>
@@ -115,10 +114,10 @@ export default {
       shop: {},
       dashboardStats: [],
       quickActions: [
-        { key: 'refund', title: '售后管理', desc: '处理退款、售后与取消订单', icon: 'receipt', theme: 'red', route: '/pages/admin/after-sales/index', badge: 0 },
-        { key: 'settings', title: '配置中心', desc: '店铺、轮播和分类配置', icon: 'store', theme: 'orange', route: '/pages/admin/settings/index' },
-        { key: 'groups', title: '团购管理', desc: '查看、结束或删除团购活动', icon: 'users', theme: 'green', route: '/pages/admin/group-list/index' },
-        { key: 'stats', title: '数据统计', desc: '销售额、订单状态、热销商品', icon: 'chart', theme: 'blue', route: '/pages/admin/stats/index' }
+        { key: 'refund', title: '售后管理', icon: 'receipt', theme: 'red', route: '/pages/admin/after-sales/index', badge: 0 },
+        { key: 'settings', title: '配置中心', icon: 'store', theme: 'orange', route: '/pages/admin/settings/index' },
+        { key: 'groups', title: '团购管理', icon: 'users', theme: 'green', route: '/pages/admin/group-list/index' },
+        { key: 'stats', title: '数据统计', icon: 'chart', theme: 'blue', route: '/pages/admin/stats/index' }
       ],
       products: [],
       groups: [],
@@ -249,7 +248,7 @@ export default {
 .stats { display:grid; grid-template-columns:repeat(2,1fr); gap:16rpx; margin-top:22rpx; padding:0; background:transparent; border:none; box-shadow:none; }
 .stats ::v-deep .stat-card { padding:22rpx 16rpx; }
 .quick-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16rpx; margin-top:22rpx; }
-.quick-card { position:relative; min-height:112rpx; padding:20rpx 18rpx; text-align:left; box-sizing:border-box; }
+.quick-card { position:relative; min-height:86rpx; padding:18rpx; text-align:left; box-sizing:border-box; }
 .quick-card__head { display:flex; align-items:center; gap:14rpx; min-width:0; }
 .quick-card__icon { @include flex-center; flex-shrink:0; width:54rpx; height:54rpx; margin:0; color:#fff; background:$gradient-primary; border-radius:16rpx; font-size:32rpx; font-weight:800; }
 .quick-card__icon--orange { background:$color-orange; }
@@ -257,11 +256,11 @@ export default {
 .quick-card__icon--blue { background:$color-blue; }
 .quick-card__icon--purple { background:#7157c8; }
 .quick-card__title { flex:1; min-width:0; @include text-body-strong; font-size:29rpx; font-weight:$font-weight-bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.quick-card__desc { margin-top:10rpx; @include text-helper($color-text-light); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .quick-card__badge {
   position:absolute;
   right:18rpx;
-  top:18rpx;
+  top:50%;
+  transform:translateY(-50%);
   min-width:34rpx;
   height:34rpx;
   padding:0 10rpx;
@@ -288,13 +287,14 @@ export default {
 .dashboard-group__head { display:flex; align-items:flex-start; justify-content:space-between; gap:18rpx; }
 .dashboard-group__copy { flex:1; min-width:0; }
 .dashboard-group__title { color:$color-text-main; font-size:30rpx; line-height:1.25; font-weight:$font-weight-heavy; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dashboard-group__subtitle { display:flex; align-items:center; gap:12rpx; margin-top:8rpx; color:$color-text-light; font-size:22rpx; line-height:1.2; }
+.dashboard-group__subtitle { display:flex; align-items:center; flex-wrap:wrap; gap:12rpx; margin-top:8rpx; color:$color-text-light; font-size:22rpx; line-height:1.2; }
 .dashboard-group__subtitle text { max-width:50%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dashboard-group__subtitle text + text { color:$color-text-regular; font-weight:$font-weight-semibold; }
+.dashboard-group__subtitle .dashboard-group__deadline { max-width:100%; padding:5rpx 12rpx; color:$color-primary; background:$color-primary-light; border-radius:$radius-pill; line-height:1.2; }
 .dashboard-group__actions { flex-shrink:0; display:flex; align-items:center; gap:10rpx; }
 .dashboard-group__actions button { display:flex; align-items:center; justify-content:center; height:48rpx; margin:0; padding:0 14rpx; border-radius:$radius-pill; font-size:22rpx; font-weight:$font-weight-bold; line-height:48rpx; box-sizing:border-box; }
 .dashboard-group__actions button::after { border:0; }
-.dashboard-group__share { gap:6rpx; min-width:108rpx; color:#18BF61; background:#fff; border:1rpx solid rgba(24,191,97,.35); }
+.dashboard-group__share { gap:6rpx; min-width:108rpx; color:$color-primary; background:$color-primary-light; border:1rpx solid rgba(255,92,114,.22); }
 .dashboard-group__manage { min-width:96rpx; color:$color-primary; background:$color-primary-light; }
 .dashboard-product-scroll { width:100%; margin-top:20rpx; white-space:nowrap; }
 .dashboard-product-strip { display:inline-flex; gap:14rpx; padding:0 2rpx 6rpx; }

@@ -13,7 +13,7 @@
     <view class="order-card__main">
       <view class="order-card__avatar">
         <image v-if="avatarImage" class="order-card__avatar-img" :src="avatarImage" mode="aspectFill" />
-        <text v-else>甜</text>
+        <text v-else>{{ avatarText }}</text>
       </view>
       <view class="order-card__user">
         <view class="order-card__user-line">
@@ -36,6 +36,7 @@
           <view class="order-card__item-count">×{{ item.count }}</view>
         </view>
       </view>
+      <view v-if="hiddenItemCount" class="order-card__more-items">还有 {{ hiddenItemCount }} 款商品，点查看详情</view>
     </view>
 
     <view v-if="showActions" class="order-card__actions">
@@ -62,22 +63,33 @@ export default {
     actionText: { type: String, default: '' }
   },
   computed: {
-    items() {
-      return (this.order.items || []).slice(0, this.maxItems).map((item, index) => ({
+    allItems() {
+      return (this.order.items || []).map((item, index) => ({
         ...item,
         _renderKey: item.productId || item.name || `item_${index}`
       }))
+    },
+    items() {
+      if (this.maxItems <= 0) return this.allItems
+      return this.allItems.slice(0, this.maxItems)
+    },
+    hiddenItemCount() {
+      if (this.maxItems <= 0) return 0
+      return Math.max(0, this.allItems.length - this.maxItems)
     },
     avatarImage() {
       const avatar = String(this.order.avatar || this.order.avatarUrl || '').trim()
       if (!avatar || ['girl', 'bear', 'rabbit'].includes(avatar)) return ''
       return avatar
     },
+    avatarText() {
+      return String(this.order.avatarText || this.order.customer || this.order.receiver || '客').trim().slice(0, 1) || '客'
+    },
     primaryActionText() {
       if (this.actionText) return this.actionText
       if (this.order.refundStatus === 'pending') return '处理售后'
       if (this.order.status === 'cancelled') return ''
-      if (this.order.status === 'completed') return '再来一单'
+      if (this.order.status === 'completed') return ''
       if (this.order.status === 'delivering') return '标记完成'
       return '标记发货'
     }
@@ -212,6 +224,18 @@ export default {
   min-width: 240rpx;
   display: flex;
   align-items: center;
+}
+
+.order-card__more-items {
+  @include flex-center;
+  width: 100%;
+  min-height: 52rpx;
+  color: $color-primary;
+  background: rgba(255, 92, 114, 0.08);
+  border-radius: $radius-sm;
+  @include font-base;
+  font-size: 24rpx;
+  font-weight: $font-weight-semibold;
 }
 
 .order-card__item-img {

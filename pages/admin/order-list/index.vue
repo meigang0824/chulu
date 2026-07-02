@@ -6,7 +6,7 @@
       <scroll-view scroll-x class="status-scroll" show-scrollbar="false">
         <view class="category-tabs">
           <view
-            v-for="tab in orderStatusTabs"
+            v-for="tab in statusTabs"
             :key="tab.key"
             class="category-tab"
             :class="{ active: active === tab.key }"
@@ -17,6 +17,28 @@
           </view>
         </view>
       </scroll-view>
+
+      <scroll-view scroll-x class="time-scroll" show-scrollbar="false">
+        <view class="time-tabs">
+          <view
+            v-for="item in timeOptions"
+            :key="item.key"
+            class="time-tab"
+            :class="{ active: timeFilter === item.key }"
+            @tap="setTimeFilter(item.key)"
+          >{{ item.text }}</view>
+        </view>
+      </scroll-view>
+
+      <view v-if="timeFilter === 'custom'" class="date-range">
+        <picker mode="date" :value="startDate || today" @change="setStartDate">
+          <view class="date-picker">{{ startDate || '开始日期' }}</view>
+        </picker>
+        <view class="date-separator">至</view>
+        <picker mode="date" :value="endDate || today" @change="setEndDate">
+          <view class="date-picker">{{ endDate || '结束日期' }}</view>
+        </picker>
+      </view>
 
       <view class="search-card" style="margin-top:18rpx;">
         <text>⌕</text>
@@ -47,6 +69,7 @@
         v-for="item in filteredOrders"
         :key="item.id"
         :order="item"
+        :max-items="0"
         @view="viewOrder"
         @updateStatus="updateStatus"
       />
@@ -78,9 +101,20 @@ export default {
         { key: 'cancelled', text: '已取消', statusKey: 'cancelled' }
       ],
       active: 'all',
+      timeFilter: 'all',
+      startDate: '',
+      endDate: '',
       keyword: '',
       loading: true,
-      list: []
+      list: [],
+      timeOptions: [
+        { key: 'all', text: '全部时间' },
+        { key: 'today', text: '今天' },
+        { key: 'yesterday', text: '昨天' },
+        { key: 'last7', text: '近7天' },
+        { key: 'last30', text: '近30天' },
+        { key: 'custom', text: '自定义' }
+      ]
     }
   },
   onLoad(query = {}) {
@@ -93,9 +127,23 @@ export default {
     this.loadOrders()
   },
   computed: {
+    today() {
+      return this.formatDate(new Date())
+    },
+    dateFilteredOrders() {
+      return this.list.filter(item => this.matchTimeRange(item))
+    },
+    statusTabs() {
+      return this.orderStatusTabs.map(tab => ({
+        ...tab,
+        count: tab.key === 'all'
+          ? this.dateFilteredOrders.length
+          : this.dateFilteredOrders.filter(item => item.status === tab.key).length
+      }))
+    },
     filteredOrders() {
       const keyword = this.keyword.trim()
-      const result = this.list.filter(item => {
+      const result = this.dateFilteredOrders.filter(item => {
         const matchedStatus = this.active === 'all' || item.status === this.active
         const matchedKeyword = !keyword || [item.customer, item.phone, item.address, ...(item.items || []).map(i => i.name)].join(' ').includes(keyword)
         return matchedStatus && matchedKeyword
@@ -109,17 +157,79 @@ export default {
       const [orders, shopConfig] = await Promise.all([getAdminOrders('all'), getShopConfig()])
       this.list = orders
       this.shop = shopConfig
-      this.orderStatusTabs = this.orderStatusTabs.map(tab => ({
-        ...tab,
-        count: tab.key === 'all'
-          ? this.list.length
-          : this.list.filter(item => item.status === tab.key).length
-      }))
       this.loading = false
     },
     resetFilters() {
       this.active = 'all'
+      this.timeFilter = 'all'
+      this.startDate = ''
+      this.endDate = ''
       this.keyword = ''
+    },
+    setTimeFilter(key) {
+      this.timeFilter = key
+      if (key !== 'custom') {
+        this.startDate = ''
+        this.endDate = ''
+      } else {
+        this.startDate = this.startDate || this.today
+        this.endDate = this.endDate || this.today
+      }
+    },
+    setStartDate(event) {
+      this.startDate = event.detail.value
+      if (this.endDate && this.startDate > this.endDate) this.endDate = this.startDate
+    },
+    setEndDate(event) {
+      this.endDate = event.detail.value
+      if (this.startDate && this.endDate < this.startDate) this.startDate = this.endDate
+    },
+    formatDate(date) {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    },
+    orderTime(order = {}) {
+      const raw = order.createdAt || order.createDateTime || order.createTime || order.payTime || ''
+      if (!raw) return 0
+      if (typeof raw === 'number') return raw < 10000000000 ? raw * 1000 : raw
+      const text = String(raw).trim()
+      if (/^\d+$/.test(text)) {
+        const value = Number(text)
+        return value < 10000000000 ? value * 1000 : value
+      }
+      const normalized = text.replace(/-/g, '/').replace('T', ' ').replace(/\.\d+Z?$/, '')
+      const time = new Date(normalized).getTime()
+      return Number.isNaN(time) ? 0 : time
+    },
+    dateStart(dateText) {
+      return new Date(`${dateText.replace(/-/g, '/')} 00:00:00`).getTime()
+    },
+    dateEnd(dateText) {
+      return new Date(`${dateText.replace(/-/g, '/')} 23:59:59`).getTime()
+    },
+    timeRange() {
+      const todayStart = this.dateStart(this.today)
+      const oneDay = 24 * 60 * 60 * 1000
+      if (this.timeFilter === 'today') return { start: todayStart, end: todayStart + oneDay - 1 }
+      if (this.timeFilter === 'yesterday') return { start: todayStart - oneDay, end: todayStart - 1 }
+      if (this.timeFilter === 'last7') return { start: todayStart - oneDay * 6, end: todayStart + oneDay - 1 }
+      if (this.timeFilter === 'last30') return { start: todayStart - oneDay * 29, end: todayStart + oneDay - 1 }
+      if (this.timeFilter === 'custom') {
+        return {
+          start: this.startDate ? this.dateStart(this.startDate) : 0,
+          end: this.endDate ? this.dateEnd(this.endDate) : Number.MAX_SAFE_INTEGER
+        }
+      }
+      return null
+    },
+    matchTimeRange(order) {
+      const range = this.timeRange()
+      if (!range) return true
+      const time = this.orderTime(order)
+      if (!time) return false
+      return time >= range.start && time <= range.end
     },
     viewOrder(order) {
       uni.navigateTo({ url: `/pages/admin/order-detail/index?id=${order.id}` })
@@ -132,7 +242,7 @@ export default {
         return
       }
       if (target.status === 'completed') {
-        uni.showToast({ title: '已为顾客创建复购提醒', icon: 'none' })
+        this.viewOrder(target)
         return
       }
       const nextStatus = target.status === 'delivering' ? 'completed' : 'delivering'
@@ -198,6 +308,63 @@ export default {
 
 .category-tab.active .category-tab__count {
   opacity: 1;
+}
+
+.time-scroll {
+  margin-top: 18rpx;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+.time-tabs {
+  display: inline-flex;
+  gap: 12rpx;
+}
+
+.time-tab {
+  @include flex-center;
+  flex: 0 0 auto;
+  height: 54rpx;
+  padding: 0 18rpx;
+  color: $color-text-regular;
+  background: #fff;
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-pill;
+  font-size: 24rpx;
+}
+
+.time-tab.active {
+  color: $color-primary;
+  background: $color-primary-light;
+  border-color: rgba(255, 92, 114, 0.20);
+  font-weight: 800;
+}
+
+.date-range {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-top: 16rpx;
+}
+
+.date-range picker {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-picker {
+  @include flex-center;
+  height: 64rpx;
+  color: $color-text-main;
+  background: #fff;
+  border: 1rpx solid $color-border-light;
+  border-radius: $radius-pill;
+  font-size: 24rpx;
+}
+
+.date-separator {
+  color: $color-text-light;
+  font-size: 24rpx;
 }
 
 .search-card {

@@ -13,7 +13,7 @@
         <view>退款原因：<text>{{ reasonText }}</text></view>
       </view>
       <view class="submitted-actions">
-        <button class="ghost-btn" @tap="copyRefundNo">复制退款编号</button>
+        <button class="ghost-btn" @tap="cancelRefund">撤回售后</button>
         <button class="primary-btn" @tap="callStore">联系客服</button>
       </view>
     </view>
@@ -113,9 +113,10 @@
 
 <script>
 import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
-import { getBuyerOrderById, getShopConfig, submitRefundRequest } from '@/services/dataService'
+import { cancelRefundRequest, getBuyerOrderById, getShopConfig, submitRefundRequest } from '@/services/dataService'
 import { ensurePageAccess } from '@/utils/auth'
 import { money } from '@/utils/format'
+import { showCloudError } from '@/utils/apiError'
 
 export default {
   components: { CustomNavBar },
@@ -204,14 +205,39 @@ export default {
         uni.showToast({ title: '申请已提交', icon: 'success' })
       } catch (error) {
         uni.hideLoading()
-        uni.showToast({ title: error.message || '提交失败', icon: 'none' })
+        showCloudError(error)
       }
     },
-    copyRefundNo() {
-      uni.setClipboardData({ data: this.refundNo })
+    cancelRefund() {
+      uni.showModal({
+        title: '撤回售后',
+        content: '确认撤回当前售后申请吗？撤回后如仍需处理，可以重新提交申请。',
+        confirmText: '撤回',
+        confirmColor: '#ff5c72',
+        success: async ({ confirm }) => {
+          if (!confirm) return
+          try {
+            uni.showLoading({ title: '撤回中' })
+            const result = await cancelRefundRequest(this.order.id)
+            uni.hideLoading()
+            uni.showToast({ title: '已撤回售后', icon: 'success' })
+            setTimeout(() => {
+              uni.redirectTo({ url: `/pages/order/detail/index?id=${(result && result.id) || this.order.id}` })
+            }, 600)
+          } catch (error) {
+            uni.hideLoading()
+            showCloudError(error)
+          }
+        }
+      })
     },
     callStore() {
-      uni.makePhoneCall({ phoneNumber: this.shop.phone })
+      const phone = String(this.shop.phone || '').replace(/[^\d]/g, '')
+      if (!phone) {
+        uni.showToast({ title: '门店暂未配置客服电话', icon: 'none' })
+        return
+      }
+      uni.makePhoneCall({ phoneNumber: phone })
     }
   }
 }

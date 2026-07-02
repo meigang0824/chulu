@@ -7,6 +7,7 @@ import { refreshAuthState, getAuthSession } from '@/utils/auth'
 import { IMAGE_ASSETS, normalizeGroupImages, normalizeImageList, normalizeImageUrl, resolveImageList, resolveImageUrl } from '@/utils/image'
 import { getDefaultBannerConfig, normalizeBannerConfig } from '@/utils/bannerConfig'
 import { cachedRuntime, clearRuntimeCache } from '@/utils/runtimeCache'
+import { formatDeadlineText } from '@/utils/format'
 
 const STORAGE_KEYS = {
   identity: 'app_user_identity',
@@ -262,6 +263,9 @@ function normalizeOrder(row = {}, productMap = {}) {
     refundNo: row.refundNo || '',
     refundAmount: Number(row.refundAmount || 0),
     refundReasonText: row.refundReasonText || '',
+    refundError: row.refundError || '',
+    refundErrorAt: row.refundErrorAt || '',
+    refundCancelledAt: row.refundCancelledAt || '',
     avatar: row.avatar || '',
     avatarText: row.avatarText || '甜',
     buyerId: row.buyerId || row.userId || '',
@@ -326,7 +330,7 @@ function extractGroupProducts(groups = []) {
       ...item,
       id: item.productId || item.id,
       productId: item.productId || item.id,
-      deadline: item.deadline || group.deadline,
+      deadline: formatDeadlineText(item.deadlineAt || group.deadlineAt, item.deadline || group.deadline),
       deadlineAt: item.deadlineAt || group.deadlineAt,
       deliveryTime: item.deliveryTime || group.deliveryTime,
       deliveryRange: item.deliveryRange || group.deliveryRange,
@@ -402,7 +406,7 @@ function buildGroupSections(groups = [], liveProducts = []) {
       _id: group._id || id,
       title,
       name: group.name || title,
-      deadline: group.deadline || '',
+      deadline: formatDeadlineText(group.deadlineAt, group.deadline || ''),
       deadlineAt: group.deadlineAt || '',
       deliveryTime: group.deliveryTime || '',
       deliveryRange: group.deliveryRange || '',
@@ -597,7 +601,8 @@ export async function deleteProduct(productId) {
   return productAPI.delete(productId, authToken())
 }
 
-export async function getBannerConfigFromCloud() {
+export async function getBannerConfigFromCloud(force = false) {
+  if (force) clearBannerRuntimeCache()
   return cachedRuntime('banners:config', CACHE_TTL.banners, async () => {
     try {
       return normalizeBannerData(await bannerAPI.getConfig())
@@ -607,8 +612,9 @@ export async function getBannerConfigFromCloud() {
   })
 }
 
-export async function getDisplayBannerConfigFromCloud() {
-  return cachedRuntime('banners:display', CACHE_TTL.banners, async () => hydrateBannerConfigImages(await getBannerConfigFromCloud()))
+export async function getDisplayBannerConfigFromCloud(force = false) {
+  if (force) clearBannerRuntimeCache()
+  return cachedRuntime('banners:display', CACHE_TTL.banners, async () => hydrateBannerConfigImages(await getBannerConfigFromCloud(force)))
 }
 
 // ==================== 首页 ====================
@@ -686,6 +692,12 @@ export async function cancelBuyerOrder(orderId) {
 
 export async function syncPaymentStatus(orderId) {
   return orderAPI.syncPaymentStatus(orderId, authToken())
+}
+
+export async function cancelPendingPaymentOrder(orderId) {
+  const result = await orderAPI.cancelPendingPayment(orderId, authToken())
+  clearOrderRuntimeCache()
+  return result
 }
 
 export async function getBuyerOrders(status = 'all') {
@@ -792,6 +804,12 @@ export async function submitRefundRequest(payload) {
   return result
 }
 
+export async function cancelRefundRequest(orderId) {
+  const result = await orderAPI.cancelRefundRequest({ orderId }, authToken())
+  clearOrderRuntimeCache()
+  return result
+}
+
 export async function handleRefundRequest(orderId, status, remark = '') {
   const result = await orderAPI.updateRefundStatus({ orderId, status, remark }, authToken())
   clearOrderRuntimeCache()
@@ -812,18 +830,18 @@ const DEFAULT_SHOP_CONFIG = {
   openTime: '09:00-21:00',
   phone: '400-888-2025',
   address: '上海市徐汇区甜品路 88 号',
-  notice: '今日截单 22:00，次日打包发货，可选快递/自提/同城。',
+  notice: '',
   assurance: '严选食材，新鲜现做，冷链打包，安心到家。',
-  deliveryRange: '全国快递 / 门店自提 / 同城配送',
-  deliveryRangeDetail: '默认快递发货；本地用户可选择门店自提或同城配送。',
+  deliveryRange: '统一配送',
+  deliveryRangeDetail: '满额后统一配送，按团购截单后打包发货。',
   deliveryTime: '次日打包发货',
-  fulfillmentMethods: ['快递发货', '门店自提', '同城配送'],
+  fulfillmentMethods: ['统一配送'],
   customerService: '09:00–21:00',
   orderTemplateId: '',
   afterSalesTemplateId: '',
   checkout: {
     deliveryTime: '次日打包发货',
-    fulfillmentMethod: '快递发货',
+    fulfillmentMethod: '统一配送',
     notePlaceholder: '口味、偏好或建议等(选填)',
     serviceText: '新鲜现做，按单打包发货，感谢等待～',
     payText: '微信支付',

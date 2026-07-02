@@ -69,6 +69,7 @@ import { getBuyerProfileSummary, getShopConfig, getUserIdentity, setPortalMode }
 import { callFunction } from '@/services/apiClient'
 import { getAuthToken, logoutAuth, requireLogin, updateAuthSessionUser } from '@/utils/auth'
 import { resolveImageUrl, uploadImageToCloud } from '@/utils/image'
+import { showCloudError } from '@/utils/apiError'
 
 export default {
   components: { CustomNavBar, AppIcon, BuyerTabBar },
@@ -86,7 +87,6 @@ export default {
       nameDraft: '',
       savingName: false,
       menus: [
-        { icon: 'receipt', text: '我的订单', url: '/pages/order/list/index' },
         { icon: 'heart', text: '我的收藏', url: '/pages/favorite/index', type: 'navigateTo' },
         { icon: 'store', text: '店长入口', url: '/pages/admin/dashboard/index', type: 'navigateTo' },
         { icon: 'user', text: '登录/注册', url: '/pages/auth/login/index', type: 'navigateTo', guestOnly: true },
@@ -170,7 +170,7 @@ export default {
                 uni.showToast({ title: '头像已更新', icon: 'success' })
               } catch (error) {
                 uni.hideLoading()
-                uni.showToast({ title: error.message || '头像上传失败', icon: 'none' })
+                showCloudError(error)
               }
             }
           })
@@ -217,7 +217,7 @@ export default {
         this.nameDraft = ''
         uni.showToast({ title: '昵称已更新', icon: 'success' })
       } catch (error) {
-        uni.showToast({ title: error.message || '昵称保存失败', icon: 'none' })
+        showCloudError(error)
       } finally {
         this.savingName = false
       }
@@ -251,7 +251,12 @@ export default {
           uni.switchTab({ url: item.url })
         }
       } else if (item.text === '联系客服') {
-        uni.makePhoneCall({ phoneNumber: this.shop.phone })
+        const phone = String(this.shop.phone || '').replace(/[^\d]/g, '')
+        if (!phone) {
+          uni.showToast({ title: '门店暂未配置客服电话', icon: 'none' })
+          return
+        }
+        uni.makePhoneCall({ phoneNumber: phone })
       } else {
         uni.showToast({ title: item.text, icon: 'none' })
       }
