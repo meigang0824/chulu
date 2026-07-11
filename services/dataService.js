@@ -8,6 +8,7 @@ import { IMAGE_ASSETS, normalizeGroupImages, normalizeImageList, normalizeImageU
 import { getDefaultBannerConfig, normalizeBannerConfig } from '@/utils/bannerConfig'
 import { cachedRuntime, clearRuntimeCache } from '@/utils/runtimeCache'
 import { formatDeadlineText } from '@/utils/format'
+import { isRevenueOrder, sumDeliveryFee, sumProductAmount, sumRevenue } from '@/utils/orderStats'
 
 const STORAGE_KEYS = {
   identity: 'app_user_identity',
@@ -291,7 +292,7 @@ function normalizeAddress(row = {}) {
 }
 
 function buildActivities(orders = [], limit = 6) {
-  const activities = orders.flatMap(order => {
+  const activities = orders.filter(isRevenueOrder).flatMap(order => {
     const name = order.buyerName || order.customer || order.receiver || '初炉用户'
     const displayName = String(name || '初炉用户')
     const maskedName = displayName.length > 1 ? `${displayName.slice(0, 1)}*` : displayName
@@ -426,7 +427,7 @@ function groupParticipantCount(group = {}, orders = []) {
   const buyers = new Set()
 
   ;(orders || []).forEach(order => {
-    if (!order || order.status === 'cancelled' || order.payStatus === 'pending') return
+    if (!isRevenueOrder(order)) return
     const items = Array.isArray(order.items) ? order.items : []
     const matched = items.some(item => {
       const itemGroupId = String(item.groupId || '')
@@ -698,6 +699,12 @@ export async function cancelPendingPaymentOrder(orderId) {
   const result = await orderAPI.cancelPendingPayment(orderId, authToken())
   clearOrderRuntimeCache()
   return result
+}
+
+export async function updateBuyerOrderAddress(orderId, address) {
+  const result = await orderAPI.updateAddress(orderId, address, authToken())
+  clearOrderRuntimeCache()
+  return hydrateOrderImages(normalizeOrder(result))
 }
 
 export async function getBuyerOrders(status = 'all') {
@@ -1064,7 +1071,7 @@ export async function getAdminDashboardData() {
     ])
 
     const todayOrders = orders.filter(item => isToday(item.createdAt || item.createDateTime || item.createTime))
-    const todaySales = todayOrders.reduce((sum, item) => sum + Number(item.payable || 0), 0)
+    const todaySales = sumRevenue(todayOrders)
     const groupSections = buildGroupSections(activeGroups || [], liveProducts)
     const groupProducts = dedupeProductsById(mergeGroupProductsWithLiveProducts(extractGroupProducts(activeGroups), liveProducts))
     const refundOrders = orders.filter(item => item.refundStatus === 'pending')
@@ -1079,7 +1086,7 @@ export async function getAdminDashboardData() {
       groups: groupSections,
       dashboardStats: [
         { key: 'orders', label: '今日订单', value: todayOrders.length, unit: '单', trend: '', trendType: 'up', icon: 'receipt', theme: 'red' },
-        { key: 'sales', label: '今日销售额', value: todaySales.toFixed(2), unit: '元', trend: '', trendType: 'up', icon: 'yuan', theme: 'orange' },
+        { key: 'sales', label: '今日实收', value: todaySales.toFixed(2), unit: '元', trend: '', trendType: 'up', icon: 'yuan', theme: 'orange' },
         { key: 'delivery', label: '待发货', value: orders.filter(item => item.status === 'pendingDelivery' || item.status === 'paid').length, unit: '单', trend: '', trendType: 'up', icon: 'truck', theme: 'blue' },
         { key: 'afterSales', label: '售后/取消', value: afterSalesCount, unit: '单', trend: '', trendType: 'up', icon: 'receipt', theme: 'orange' }
       ],
@@ -1093,8 +1100,10 @@ export async function getAdminStatsData(params = {}) {
   const startDate = params.startDate || ''
   const endDate = params.endDate || ''
   const rangeOrders = orders.filter(item => inDateRange(item.createdAt || item.createDateTime || item.createTime, startDate, endDate))
-  const payableOrders = rangeOrders.filter(item => item.payStatus === 'paid' && item.status !== 'cancelled')
-  const totalSales = payableOrders.reduce((sum, item) => sum + Number(item.payable || item.amount || 0), 0)
+  const payableOrders = rangeOrders.filter(isRevenueOrder)
+  const totalSales = sumRevenue(rangeOrders)
+  const productSales = sumProductAmount(rangeOrders)
+  const deliverySales = sumDeliveryFee(rangeOrders)
   const completedSales = payableOrders
     .filter(item => item.status === 'completed')
     .reduce((sum, item) => sum + Number(item.payable || item.amount || 0), 0)
@@ -1119,9 +1128,11 @@ export async function getAdminStatsData(params = {}) {
       generatedAt: dateTimeText(new Date())
     },
     overview: [
-      { key: 'sales', label: '销售额', value: totalSales.toFixed(2), unit: '元' },
+      { key: 'sales', label: '实收金额', value: totalSales.toFixed(2), unit: '元' },
+      { key: 'productSales', label: '商品金额', value: productSales.toFixed(2), unit: '元' },
+      { key: 'deliverySales', label: '运费收入', value: deliverySales.toFixed(2), unit: '元' },
       { key: 'orders', label: '订单数', value: rangeOrders.length, unit: '单' },
-      { key: 'completed', label: '已完成销售额', value: completedSales.toFixed(2), unit: '元' },
+      { key: 'completed', label: '已完成实收', value: completedSales.toFixed(2), unit: '元' },
       { key: 'products', label: '上架商品数', value: activeProducts, unit: '个' }
     ],
     statusStats: [

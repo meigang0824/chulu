@@ -66,6 +66,7 @@ export const orderAPI = {
   get: (id, authToken = '') => callBusinessApi('getOrder', { id }, authToken),
   create: (data, authToken = '') => callBusinessApi('createOrder', data, authToken),
   update: (id, data, authToken = '') => callBusinessApi('updateOrder', { id, ...data }, authToken),
+  updateAddress: (id, address, authToken = '') => callBusinessApi('updateOrderAddress', { id, address }, authToken),
   updateStatus: (id, status, authToken = '') => callBusinessApi('updateOrderStatus', { id, status }, authToken),
   syncPaymentStatus: (id, authToken = '') => callBusinessApi('syncPaymentStatus', { id }, authToken),
   cancelPendingPayment: (id, authToken = '') => callBusinessApi('cancelPendingPaymentOrder', { id }, authToken),

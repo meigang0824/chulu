@@ -60,9 +60,10 @@ import EmptyState from '@/components/EmptyState/EmptyState.vue'
 import BuyerTabBar from '@/components/BuyerTabBar/BuyerTabBar.vue'
 import { getCartItems, removeCartItems, saveCartItems, setCheckoutItems, updateCartItemCount } from '@/utils/shopState'
 import { requireLogin } from '@/utils/auth'
-import { getProductById, getShopConfig } from '@/services/dataService'
+import { getActiveGroups, getProductById, getShopConfig } from '@/services/dataService'
 import { IMAGE_ASSETS, resolveImageUrl } from '@/utils/image'
 import { money } from '@/utils/format'
+import { findActiveCartGroup } from '@/utils/cartAvailability'
 
 export default {
   components: { CustomNavBar, EmptyState, BuyerTabBar },
@@ -81,10 +82,19 @@ export default {
       return this.items.reduce((sum, item) => sum + Number(item.count || 0), 0)
     },
     totalAmount() {
-      return money(this.productAmount)
+      return money(this.payableAmount)
     },
     productAmount() {
       return this.items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.count || 0), 0)
+    },
+    deliveryFee() {
+      const fee = Number(this.checkoutConfig.deliveryFee || 0)
+      if (!fee) return 0
+      if (this.minimumOrderAmount && this.productAmount >= this.minimumOrderAmount) return 0
+      return fee
+    },
+    payableAmount() {
+      return Math.max(0, this.productAmount + this.deliveryFee)
     },
     minimumOrderAmount() {
       return Number(this.checkoutConfig.minimumOrderAmount || this.checkoutConfig.freeShippingAmount || 0)
@@ -93,12 +103,12 @@ export default {
       return Math.max(0, this.minimumOrderAmount - this.productAmount)
     },
     canCheckout() {
-      return !this.minimumOrderAmount || this.productAmount >= this.minimumOrderAmount
+      return this.productAmount > 0
     },
     checkoutTip() {
       if (!this.minimumOrderAmount) return ''
-      if (this.canCheckout) return `已满 ￥${money(this.minimumOrderAmount)}，可统一配送`
-      return `满 ￥${money(this.minimumOrderAmount)} 起统一配送，还差 ￥${money(this.amountMissing)}`
+      if (this.productAmount >= this.minimumOrderAmount) return `已满 ￥${money(this.minimumOrderAmount)}，免配送费`
+      return `满￥${money(this.minimumOrderAmount)}免运，还差￥${money(this.amountMissing)}，含运费￥${money(this.deliveryFee)}`
     }
   },
   methods: {
@@ -116,6 +126,13 @@ export default {
       this.items = items
       let removedCount = 0
       let adjustedCount = 0
+      let syncedCount = 0
+      let activeGroups = []
+      let groupValidationReady = false
+      try {
+        activeGroups = await getActiveGroups()
+        groupValidationReady = true
+      } catch {}
       const resolved = (await Promise.all(items.map(async item => {
         const id = item.productId || item.id
         let product = null
@@ -146,31 +163,58 @@ export default {
           removedCount += 1
           return null
         }
+        const group = groupValidationReady
+          ? findActiveCartGroup({ ...item, productId: product.id || product._id || id }, activeGroups)
+          : null
+        if (groupValidationReady && !group) {
+          removedCount += 1
+          return null
+        }
         const currentCount = Number(item.count || 1)
         const count = Math.min(Math.max(1, currentCount), max)
         if (count !== currentCount) adjustedCount += 1
+        const nextPrice = Number(product.price !== undefined ? product.price : item.price || 0)
+        const nextOriginPrice = Number(product.originPrice !== undefined ? product.originPrice : item.originPrice || 0)
+        const nextGroupId = group ? (group.id || group._id || group.groupId || '') : (item.groupId || '')
+        const nextGroupName = group ? (group.title || group.name || '') : (item.groupName || '')
+        const nextDeliveryTime = group ? (group.deliveryTime || item.deliveryTime || '') : (item.deliveryTime || '')
+        if (
+          nextPrice !== Number(item.price || 0) ||
+          nextOriginPrice !== Number(item.originPrice || 0) ||
+          (product.name && product.name !== item.name) ||
+          nextGroupId !== (item.groupId || '') ||
+          nextGroupName !== (item.groupName || '') ||
+          nextDeliveryTime !== (item.deliveryTime || '')
+        ) {
+          syncedCount += 1
+        }
         return {
           ...item,
           id: product.id || product._id || id,
           productId: product.id || product._id || id,
           name: product.name || item.name || '',
           desc: product.desc || item.desc || '',
-          price: Number(product.price || item.price || 0),
-          originPrice: Number(product.originPrice || item.originPrice || 0),
+          price: nextPrice,
+          originPrice: nextOriginPrice,
           image: product.image || await resolveImageUrl(product.imageFileID || item.imageFileID || item.image, IMAGE_ASSETS.product),
           imageFileID: product.imageFileID || product.image || item.imageFileID || item.image,
           stock,
           limit,
+          groupId: nextGroupId,
+          groupName: nextGroupName,
+          deliveryTime: nextDeliveryTime,
           count
         }
       }))).filter(Boolean)
       this.items = resolved
-      if (removedCount || adjustedCount) {
+      if (removedCount || adjustedCount || syncedCount) {
         saveCartItems(resolved)
-        uni.showToast({
-          title: removedCount ? '已移除不可购买商品' : '已同步最新库存',
-          icon: 'none'
-        })
+        if (removedCount || adjustedCount) {
+          uni.showToast({
+            title: removedCount ? '已移除不可购买商品' : '已同步最新库存',
+            icon: 'none'
+          })
+        }
       }
     },
     async repairItemImage(item) {
@@ -223,10 +267,6 @@ export default {
     },
     checkout() {
       if (!requireLogin('结算前请先登录')) return
-      if (!this.canCheckout) {
-        uni.showToast({ title: `满￥${money(this.minimumOrderAmount)}起统一配送`, icon: 'none' })
-        return
-      }
       setCheckoutItems(this.items)
       uni.navigateTo({ url: '/pages/order/confirm/index?from=cart' })
     },
@@ -286,7 +326,7 @@ export default {
 .cart-bottom { position: fixed; left: 0; right: 0; bottom: calc(142rpx + env(safe-area-inset-bottom)); z-index: 20; display: flex; align-items: center; gap: 22rpx; padding: 18rpx 24rpx; background: rgba(255, 253, 249, 0.98); border-top: 1rpx solid $color-border-light; box-shadow: $shadow-bottom; }
 .cart-bottom__meta { flex: 1; min-width: 0; color: $color-text-regular; font-size: 24rpx; }
 .cart-bottom__meta text { display: block; margin-top: 4rpx; color: $color-primary; font-size: 34rpx; font-weight: 900; }
-.cart-bottom__tip { margin-top: 4rpx; color: $color-text-regular; font-size: 22rpx; line-height: 1.25; }
+.cart-bottom__tip { margin-top: 4rpx; color: $color-text-regular; font-size: 22rpx; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cart-bottom button { @include flex-center; width: 220rpx; height: 88rpx; margin: 0; color: #fff; background: $gradient-primary; border: none; border-radius: $radius-pill; box-shadow: $shadow-btn; font-size: 30rpx; font-weight: 800; }
 .cart-bottom button.is-disabled { background: $color-text-light; box-shadow: none; }
 </style>

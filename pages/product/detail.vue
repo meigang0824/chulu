@@ -69,9 +69,9 @@
         </view>
 
         <view class="stats">
-          <view>已售 {{ product.sold || 0 }} 份</view>
-          <view>仅剩 {{ product.stock || 0 }} 份</view>
-          <view v-if="deadlineText">{{ deadlineText }}</view>
+          <view class="stats__item">已售 {{ product.sold || 0 }} 份</view>
+          <view class="stats__item">仅剩 {{ product.stock || 0 }} 份</view>
+          <view v-if="deadlineText" class="stats__item stats__item--deadline">{{ deadlineText }}</view>
         </view>
 
         <!-- 拼团进度条 -->
@@ -137,10 +137,9 @@
         <text>分享</text>
       </button>
       <button class="cart-action" @tap="addToCart">加入购物车</button>
-      <button class="join" :class="{ 'join--disabled': pageLoading || product.stock <= 0 }" :disabled="pageLoading || product.stock <= 0" @tap="goConfirm">
+      <button class="join" :class="{ 'join--disabled': pageLoading }" :disabled="pageLoading" @tap="goCart">
         <block v-if="pageLoading">加载中...</block>
-        <block v-else-if="product.stock > 0">去跟团 ￥{{ totalPrice }}</block>
-        <block v-else>已售罄</block>
+        <block v-else>去购物车</block>
       </button>
     </view>
   </view>
@@ -151,7 +150,6 @@ import CustomNavBar from '@/components/CustomNavBar/CustomNavBar.vue'
 import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
 import AppIcon from '@/components/AppIcon/AppIcon.vue'
 import { getBuyerActivities, getProductById } from '@/services/dataService'
-import { requireLogin } from '@/utils/auth'
 import { addCartItem, getCartItemCount, isFavorite, setFavorite } from '@/utils/shopState'
 import { cloudImageHttpsUrl, IMAGE_ASSETS } from '@/utils/image'
 import { formatDeadlineText, money } from '@/utils/format'
@@ -328,29 +326,43 @@ export default {
         }
         const contextDetail = Array.isArray(context.detail) && context.detail.length ? context.detail : context.detail
         const productDetail = Array.isArray(product.detail) && product.detail.length ? product.detail : product.detail
+        const contextGallery = Array.isArray(context.gallery) && context.gallery.length
+          ? context.gallery
+          : Array.isArray(context.galleryFileIDs) && context.galleryFileIDs.length
+            ? context.galleryFileIDs
+            : []
+        const productGallery = Array.isArray(product.gallery) && product.gallery.length
+          ? product.gallery
+          : Array.isArray(product.galleryFileIDs) && product.galleryFileIDs.length
+            ? product.galleryFileIDs
+            : []
         this.product = {
-          ...product,
           ...context,
+          ...product,
           id: product.id || context.id,
           _id: product._id || context._id,
           productId: product.productId || context.productId || product.id,
+          image: product.image || context.image,
+          bannerImage: product.bannerImage || context.bannerImage || context.image,
+          gallery: productGallery.length ? productGallery : contextGallery,
+          galleryFileIDs: Array.isArray(product.galleryFileIDs) && product.galleryFileIDs.length ? product.galleryFileIDs : contextGallery,
           desc: this.cleanText(product.desc || product.subtitle) || this.cleanText(context.desc || context.subtitle),
           subtitle: this.cleanText(product.subtitle || product.desc) || this.cleanText(context.subtitle || context.desc),
           detail: productDetail && (!Array.isArray(productDetail) || productDetail.length) ? productDetail : contextDetail
         }
+        this.currentImageIndex = 0
       } catch (error) {
         console.error('获取商品失败:', error)
         uni.showToast({ title: '网络异常，请检查连接', icon: 'none' })
         throw error
       }
     },
-    goConfirm() {
-      if (this.pageLoading || this.product.stock <= 0) {
-        uni.showToast({ title: this.pageLoading ? '商品加载中' : '商品已售罄', icon: 'none' })
+    goCart() {
+      if (this.pageLoading) {
+        uni.showToast({ title: '商品加载中', icon: 'none' })
         return
       }
-      if (!requireLogin('请先登录后再参与团购')) return
-      uni.navigateTo({ url: `/pages/order/confirm/index?id=${this.product.id}&count=${this.count}` })
+      uni.switchTab({ url: '/pages/cart/index' })
     },
     decreaseCount() {
       if (this.count <= 1) return
@@ -486,12 +498,14 @@ export default {
   text-align: center;
 }
 
-.stats { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 24rpx; }
-.stats view {
-  flex: 1; min-width: 190rpx; @include flex-center; height: 64rpx;
-  color: $color-primary; background: $color-primary-pale; border: 1rpx solid rgba(255, 92, 114, 0.12); border-radius: $radius-pill; font-size: 24rpx;
+.stats { display: flex; align-items: center; flex-wrap: nowrap; gap: 10rpx; margin-top: 24rpx; min-width: 0; }
+.stats__item {
+  flex: 1 1 0; min-width: 0; @include flex-center; height: 64rpx; padding: 0 10rpx; box-sizing: border-box;
+  color: $color-primary; background: $color-primary-pale; border: 1rpx solid rgba(255, 92, 114, 0.12); border-radius: $radius-pill; font-size: 23rpx;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.stats view:first-child { color: $color-text-regular; }
+.stats__item:first-child { color: $color-text-regular; }
+.stats__item--deadline { flex: 1.35 1 0; }
 
 .detail-card { margin: 24rpx 24rpx 0; padding: 28rpx; }
 .detail-content {

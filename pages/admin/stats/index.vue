@@ -136,7 +136,7 @@ export default {
       if (!this.startDate && !this.endDate) return '全部时间'
       if (this.startDate && this.endDate && this.startDate === this.endDate) return this.startDate
       return `${this.startDate || '不限'} 至 ${this.endDate || '不限'}`
-    },
+    }
   },
   methods: {
     money,

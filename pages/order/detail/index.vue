@@ -15,7 +15,13 @@
     </template>
 
     <template v-else>
-      <AddressCard class="detail-card" :address="addressInfo" variant="receiver" />
+      <view class="address-block">
+        <view class="address-block__head">
+          <text>收货信息</text>
+          <button v-if="canEditAddress" @tap="chooseOrderAddress">修改</button>
+        </view>
+        <AddressCard :address="addressInfo" variant="receiver" />
+      </view>
 
       <view class="goods-card card">
         <view class="section-head">
@@ -120,10 +126,12 @@ import AddressCard from '@/components/AddressCard/AddressCard.vue'
 import StatusTag from '@/components/StatusTag/StatusTag.vue'
 import SkeletonBlock from '@/components/SkeletonBlock/SkeletonBlock.vue'
 import EmptyState from '@/components/EmptyState/EmptyState.vue'
-import { cancelBuyerOrder, cancelRefundRequest, getBuyerOrderById, getShopConfig } from '@/services/dataService'
+import { cancelBuyerOrder, cancelRefundRequest, getBuyerOrderById, getShopConfig, updateBuyerOrderAddress } from '@/services/dataService'
 import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
 import { money } from '@/utils/format'
+
+const SELECTED_ORDER_ADDRESS_KEY = 'buyer_order_edit_address'
 
 export default {
   components: { CustomNavBar, AddressCard, StatusTag, SkeletonBlock, EmptyState },
@@ -131,7 +139,9 @@ export default {
     return {
       order: { items: [], progress: [] },
       shop: {},
-      pageLoading: true
+      pageLoading: true,
+      orderId: '',
+      applyingAddress: false
     }
   },
   computed: {
@@ -167,6 +177,10 @@ export default {
     canCancel() {
       return ['paid', 'pendingDelivery'].includes(this.order.status) && this.order.refundStatus !== 'pending'
     },
+    canEditAddress() {
+      return ['pendingPayment', 'paid', 'pendingDelivery'].includes(this.order.status) &&
+        !['delivering', 'completed', 'cancelled'].includes(this.order.deliveryStatus)
+    },
     canRefund() {
       return ['delivering', 'completed'].includes(this.order.status)
     },
@@ -201,12 +215,17 @@ export default {
   },
   async onLoad(query) {
     if (!ensurePageAccess('/pages/order/detail/index', '登录后查看订单详情')) return
+    this.orderId = query.id || ''
     this.shop = await getShopConfig()
     if (query.id) {
       const result = await getBuyerOrderById(query.id)
       if (result) this.order = result
     }
     this.pageLoading = false
+  },
+  onShow() {
+    if (!this.orderId || this.pageLoading) return
+    this.applySelectedOrderAddress()
   },
   methods: {
     money,
@@ -224,6 +243,38 @@ export default {
     },
     copyRefundError() {
       uni.setClipboardData({ data: this.order.refundError || '' })
+    },
+    chooseOrderAddress() {
+      if (!this.canEditAddress) {
+        uni.showToast({ title: '当前订单不能修改地址', icon: 'none' })
+        return
+      }
+      const orderId = this.order.id || this.order.detailId || this.orderId
+      uni.navigateTo({ url: `/pages/address/list/index?select=1&target=order&orderId=${encodeURIComponent(orderId)}` })
+    },
+    async applySelectedOrderAddress() {
+      if (this.applyingAddress) return
+      const payload = uni.getStorageSync(SELECTED_ORDER_ADDRESS_KEY)
+      if (!payload || !payload.address) return
+      const currentOrderId = this.order.id || this.order.detailId || this.orderId
+      if (payload.orderId && payload.orderId !== currentOrderId) return
+      uni.removeStorageSync(SELECTED_ORDER_ADDRESS_KEY)
+      if (!this.canEditAddress) {
+        uni.showToast({ title: '当前订单不能修改地址', icon: 'none' })
+        return
+      }
+      try {
+        this.applyingAddress = true
+        uni.showLoading({ title: '保存中' })
+        this.order = await updateBuyerOrderAddress(currentOrderId, payload.address)
+        uni.hideLoading()
+        uni.showToast({ title: '地址已修改', icon: 'success' })
+      } catch (error) {
+        uni.hideLoading()
+        showCloudError(error)
+      } finally {
+        this.applyingAddress = false
+      }
     },
     callDriver() {
       const phone = String(this.order.driverPhone || this.shop.phone || '').replace(/[^\d]/g, '')
@@ -353,9 +404,35 @@ export default {
 .order-detail { min-height: 100vh; padding: 0 24rpx 190rpx; background: $gradient-page; }
 .skeleton-wrap .skeleton-card { padding: 24rpx; border-radius: $radius-card; margin-top: 20rpx; background: #fff; }
 
-.detail-card, .goods-card, .info-card, .amount-card, .progress-card, .refund-notice { margin-top: 20rpx; }
+.address-block, .goods-card, .info-card, .amount-card, .progress-card, .refund-notice { margin-top: 20rpx; }
 
 .goods-card, .info-card, .amount-card, .progress-card, .refund-notice { padding: 28rpx; }
+.address-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 12rpx;
+  padding: 0 4rpx;
+}
+.address-block__head text {
+  color: $color-text-main;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+.address-block__head button {
+  @include flex-center;
+  width: 112rpx;
+  height: 52rpx;
+  margin: 0;
+  padding: 0;
+  color: $color-primary;
+  background: $color-primary-light;
+  border: 1rpx solid rgba(255, 92, 114, 0.16);
+  border-radius: $radius-pill;
+  font-size: 24rpx;
+  font-weight: 700;
+}
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; margin-bottom: 8rpx; }
 .goods-item { display: flex; align-items: center; gap: 18rpx; padding: 20rpx 0; border-bottom: 1rpx solid $color-border-light; }
 .goods-item:last-child { padding-bottom: 0; border-bottom: none; }

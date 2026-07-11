@@ -73,6 +73,10 @@ export function addCartItem(product = {}, count = 1) {
     items[index] = {
       ...items[index],
       count: Math.min(max, Number(items[index].count || 0) + nextCount),
+      name: product.name || items[index].name || '',
+      desc: product.desc || items[index].desc || '',
+      price: Number(product.price !== undefined ? product.price : items[index].price || 0),
+      originPrice: Number(product.originPrice !== undefined ? product.originPrice : items[index].originPrice || 0),
       stock,
       limit: rawLimit,
       image,

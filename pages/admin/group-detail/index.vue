@@ -45,6 +45,36 @@
         </view>
       </view>
 
+      <!-- 商品销售统计 -->
+      <view class="sales-card card">
+        <view class="card-title">商品销售统计</view>
+        <view class="sales-summary">
+          <view>
+            <text>{{ salesSummary.soldCount }}</text>
+            <view>已售份数</view>
+          </view>
+          <view>
+            <text>￥{{ money(salesSummary.salesAmount) }}</text>
+            <view>销售额</view>
+          </view>
+        </view>
+        <view v-if="salesNotice" class="participant-notice">{{ salesNotice }}</view>
+        <view v-if="!salesStats.length" class="empty-products">暂无销售数据</view>
+        <view v-else class="sales-list">
+          <view v-for="item in salesStats" :key="item.productId" class="sales-row">
+            <view class="sales-row__main">
+              <view class="sales-row__name">{{ item.name }}</view>
+              <view class="sales-row__meta">库存 {{ item.stock || 0 }} · 单价 ￥{{ money(item.price) }}</view>
+            </view>
+            <view class="sales-row__stat">
+              <text>{{ item.soldCount }}</text>
+              <view>份</view>
+            </view>
+            <view class="sales-row__amount">￥{{ money(item.salesAmount) }}</view>
+          </view>
+        </view>
+      </view>
+
       <!-- 参与用户（基于订单统计） -->
       <view class="participants-card card">
         <view class="card-title">参与用户 ({{ participantCount }}人)</view>
@@ -90,6 +120,7 @@ import { getAdminOrders, hydrateGroupImages } from '@/services/dataService'
 import { ensurePageAccess, getAuthSession } from '@/utils/auth'
 import { cloudImageHttpsUrl, IMAGE_ASSETS } from '@/utils/image'
 import { formatDeadlineText, money } from '@/utils/format'
+import { buildGroupParticipants, buildGroupProductSalesStats } from '@/utils/orderStats'
 
 export default {
   components: { CustomNavBar, StatusTag, SkeletonBlock, EmptyState },
@@ -98,6 +129,9 @@ export default {
       loading: true,
       group: null,
       products: [],
+      salesStats: [],
+      salesSummary: { soldCount: 0, salesAmount: 0 },
+      salesNotice: '',
       participants: [],
       participantCount: 0,
       participantNotice: '',
@@ -165,47 +199,37 @@ export default {
         const groupOrders = exactOrders.length
           ? exactOrders
           : orders.filter(order => this.orderBelongsToGroup(order, groupId, groupProductIds))
+        this.buildSalesStats(exactOrders.length ? exactOrders : orders, !exactOrders.length)
         this.participantNotice = exactOrders.length
           ? ''
           : (groupOrders.length ? '部分历史订单缺少团购编号，当前按关联商品估算参与用户。' : '')
-        const userMap = {}
-        groupOrders.forEach(order => {
-          const key = order.buyerId || order._openid || order.customer
-          if (!userMap[key]) {
-            userMap[key] = {
-              id: key,
-              displayName: order.customer || order.receiver || '匿名用户',
-              avatar: order.avatar || '',
-              avatarText: order.avatarText || (order.customer || order.receiver || '用').slice(0, 1),
-              phone: order.fullPhone || order.phone || '',
-              paid: false,
-              payText: '未支付',
-              orderCount: 0,
-              itemMap: {}
-            }
-          }
-          userMap[key].orderCount++
-          if (order.payStatus === 'paid' || order.status !== 'unpaid') {
-            userMap[key].paid = true
-            userMap[key].payText = '已支付'
-          }
-          ;(order.items || []).forEach(item => {
-            if (!this.orderItemBelongsToGroup(item, groupId, groupProductIds)) return
-            const name = item.name || '商品'
-            userMap[key].itemMap[name] = (userMap[key].itemMap[name] || 0) + Number(item.count || 0)
-          })
+        const { participants } = buildGroupParticipants({
+          orders: groupOrders,
+          groupId,
+          productIds: groupProductIds,
+          allowProductFallback: !exactOrders.length
         })
-        const participants = Object.values(userMap).map(user => ({
-          ...user,
-          itemSummary: Object.keys(user.itemMap)
-            .map(name => `${name} ×${user.itemMap[name]}`)
-            .join('、') || `订单 ${user.orderCount} 笔`
-        })).sort((a, b) => b.orderCount - a.orderCount)
         this.participants = participants.slice(0, 20) // 最多显示20人
         this.participantCount = participants.length
       } catch (e) {
         console.error('加载参与用户失败:', e)
       }
+    },
+    buildSalesStats(orders = [], allowProductFallback = false) {
+      const groupId = String(this.group && (this.group.id || this.group._id || this.group.groupId) || '')
+      const stats = buildGroupProductSalesStats({
+        products: this.products,
+        orders,
+        groupId,
+        allowProductFallback
+      })
+      const soldCount = stats.reduce((sum, item) => sum + Number(item.soldCount || 0), 0)
+      const salesAmount = stats.reduce((sum, item) => sum + Number(item.salesAmount || 0), 0)
+      this.salesStats = stats
+      this.salesSummary = { soldCount, salesAmount: Number(salesAmount.toFixed(2)) }
+      this.salesNotice = allowProductFallback && soldCount
+        ? '部分历史订单缺少团购编号，当前按关联商品估算销售统计。'
+        : ''
     },
     groupProductIdSet() {
       const values = [
@@ -297,6 +321,21 @@ export default {
 .product-item__name { font-size: 28rpx; font-weight: 600; color: $color-text-main; @include text-ellipsis; }
 .product-item__meta { display: flex; gap: 20rpx; margin-top: 8rpx; font-size: 22rpx; color: $color-text-regular; }
 .product-item__meta text:first-child { color: $color-primary; font-weight: 700; }
+
+.sales-card { margin-top: 20rpx; padding: 24rpx; }
+.sales-summary { display:grid; grid-template-columns:repeat(2,1fr); gap:14rpx; margin-bottom:16rpx; }
+.sales-summary > view { min-width:0; padding:18rpx; background:$color-primary-pale; border:1rpx solid rgba(255,92,114,.12); border-radius:16rpx; }
+.sales-summary text { color:$color-primary; font-size:34rpx; font-weight:800; line-height:1; }
+.sales-summary view view { margin-top:8rpx; color:$color-text-regular; font-size:22rpx; }
+.sales-list { display:flex; flex-direction:column; gap:12rpx; }
+.sales-row { display:flex; align-items:center; gap:14rpx; padding:14rpx; background:$color-bg-light; border-radius:16rpx; }
+.sales-row__main { flex:1; min-width:0; }
+.sales-row__name { color:$color-text-main; font-size:26rpx; font-weight:700; @include text-ellipsis; }
+.sales-row__meta { margin-top:6rpx; color:$color-text-light; font-size:22rpx; @include text-ellipsis; }
+.sales-row__stat { flex-shrink:0; width:86rpx; text-align:center; color:$color-text-light; font-size:20rpx; }
+.sales-row__stat text { display:block; color:$color-primary; font-size:32rpx; font-weight:800; line-height:1; }
+.sales-row__stat view { margin-top:4rpx; }
+.sales-row__amount { flex-shrink:0; min-width:116rpx; color:$color-text-main; font-size:26rpx; font-weight:800; text-align:right; }
 
 .participants-card { margin-top: 20rpx; padding: 24rpx; }
 .participant-notice { margin-bottom:14rpx; padding:12rpx 16rpx; color:$color-text-regular; background:$color-orange-light; border:1rpx solid rgba(200,121,50,.16); border-radius:14rpx; font-size:22rpx; line-height:1.35; }
