@@ -609,21 +609,23 @@ export default {
 .group-card__metrics {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 10rpx;
+  flex-wrap: nowrap;
+  gap: 8rpx;
   margin-top: 12rpx;
   color: $color-text-light;
   font-size: 22rpx;
   line-height: 1.2;
+  min-width: 0;
 }
 
 .group-card__metric {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   gap: 4rpx;
   height: 42rpx;
-  padding: 0 12rpx;
+  padding: 0 10rpx;
   color: $color-text-regular;
   background: $color-bg-light;
   border: 1rpx solid $color-border-light;
@@ -658,9 +660,11 @@ export default {
 }
 
 .group-card__deadline {
-  max-width: 260rpx;
+  min-width: 0;
+  max-width: 220rpx;
+  flex: 0 1 auto;
   height: 42rpx;
-  padding: 0 14rpx;
+  padding: 0 12rpx;
   color: $color-primary !important;
   background: $color-primary-light;
   border-radius: $radius-pill;

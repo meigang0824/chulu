@@ -41,7 +41,7 @@
       <view class="tip-card__title">接下来会发生什么</view>
       <view class="tip-card__item">1. 店长会尽快确认订单并开始备货</view>
       <view class="tip-card__item">2. 配送开始后，你可以在订单页查看进度</view>
-      <view class="tip-card__item">3. 如需修改收货信息，请尽快联系客服</view>
+      <view class="tip-card__item">3. 待配送前可在订单详情修改收货信息</view>
     </view>
 
     <view class="bottom-actions">

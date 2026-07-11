@@ -205,6 +205,18 @@ function amountToFen(amount) {
   return Math.max(1, Math.round(Number(amount || 0) * 100))
 }
 
+function isRevenueOrder(order = {}) {
+  if (!order) return false
+  if (order.status === 'cancelled') return false
+  return order.payStatus === 'paid'
+}
+
+function sumRevenue(orders = []) {
+  return (orders || [])
+    .filter(isRevenueOrder)
+    .reduce((sum, order) => sum + Number(order.payable || order.amount || 0), 0)
+}
+
 function signWechatPayMessage(message) {
   return crypto
     .createSign('RSA-SHA256')
@@ -246,6 +258,19 @@ function readableWechatPayError(error) {
   const message = String(error && (error.message || error.errMsg || '') || '').trim()
   if (!message) return '微信支付接口暂不可用'
   return message.replace(/^微信支付请求失败[:：]?/i, '').slice(0, 120)
+}
+
+function truncateUtf8(value = '', maxBytes = 120) {
+  const text = String(value || '')
+  let output = ''
+  let bytes = 0
+  for (const char of text) {
+    const size = Buffer.byteLength(char, 'utf8')
+    if (bytes + size > maxBytes) break
+    output += char
+    bytes += size
+  }
+  return output
 }
 
 async function getWechatAccessToken() {
@@ -732,7 +757,8 @@ function normalizeProductDoc(r = {}) {
     docId: r._id,
     specs: safeJson(r.specs),
     detail: safeJson(r.detail),
-    gallery: safeJson(r.gallery)
+    gallery: safeJson(r.gallery),
+    galleryFileIDs: safeJson(r.galleryFileIDs || r.gallery)
   }
 }
 
@@ -764,7 +790,9 @@ async function createProduct(body) {
     deliveryText: body.deliveryText || '', deliveryRange: body.deliveryRange || '',
     storage: body.storage || '', sort: body.sort || Date.now(),
     specs: JSON.stringify(body.specs || []), detail: JSON.stringify(body.detail || []),
-    gallery: JSON.stringify(body.gallery || []), createdAt: now(), updatedAt: now()
+    gallery: JSON.stringify(body.gallery || []),
+    galleryFileIDs: JSON.stringify(body.galleryFileIDs || body.gallery || []),
+    createdAt: now(), updatedAt: now()
   }
   await db.collection('products').add({ data: doc })
   const created = await getProduct(id, '', { includeInactive: true })
@@ -796,7 +824,8 @@ async function updateProduct(id, body) {
     sort: body.sort !== undefined ? body.sort : e.sort,
     specs: body.specs ? JSON.stringify(body.specs) : e.specs,
     detail: body.detail ? JSON.stringify(body.detail) : e.detail,
-    gallery: body.gallery ? JSON.stringify(body.gallery) : e.gallery,
+    gallery: body.gallery !== undefined ? JSON.stringify(body.gallery || []) : e.gallery,
+    galleryFileIDs: body.galleryFileIDs !== undefined ? JSON.stringify(body.galleryFileIDs || []) : (e.galleryFileIDs || e.gallery),
     updatedAt: now()
   }
   if (existing.length) await db.collection('products').doc(existing[0]._id).update({ data: updateData })
@@ -946,10 +975,7 @@ async function createOrder(body, authToken = '') {
             ? body.freeShippingAmount
             : 88
     const minimumOrderAmount = Number(rawMinimumOrderAmount || 0)
-    if (minimumOrderAmount > 0 && productAmount < minimumOrderAmount) {
-      throw businessError('MINIMUM_ORDER_AMOUNT', `满￥${minimumOrderAmount.toFixed(2)}起统一配送，还差￥${(minimumOrderAmount - productAmount).toFixed(2)}`)
-    }
-    const deliveryFee = minimumOrderAmount > 0 ? 0 : baseDeliveryFee
+    const deliveryFee = minimumOrderAmount > 0 && productAmount >= minimumOrderAmount ? 0 : baseDeliveryFee
     const discount = Number(body.discount || 0)
     const payable = Math.max(0, productAmount + deliveryFee - discount)
     const paymentExpiresAt = realPayment ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : ''
@@ -984,14 +1010,14 @@ async function createOrder(body, authToken = '') {
     })
     return { ...createdOrder, payRequired: true, payment: payment.params }
   } catch (error) {
-    await rollbackPendingPaymentOrder(id, 'paymentFailed')
+    await rollbackPendingPaymentOrder(id, 'paymentFailed', readableWechatPayError(error))
     throw error
   }
 }
 
 async function createWechatJsapiPayment(order, openid) {
   const items = Array.isArray(order.items) ? order.items : safeJson(order.items)
-  const description = (items.map(item => item.name).filter(Boolean).join('、') || '初炉烘焙订单').slice(0, 120)
+  const description = truncateUtf8(items.map(item => item.name).filter(Boolean).join('、') || '初炉烘焙订单', 120)
   const body = {
     appid: WECHAT_CONFIG.appid,
     mchid: WECHAT_PAY_CONFIG.mchid,
@@ -1013,7 +1039,7 @@ async function createWechatJsapiPayment(order, openid) {
   }
 }
 
-async function rollbackPendingPaymentOrder(id, reason = 'paymentFailed') {
+async function rollbackPendingPaymentOrder(id, reason = 'paymentFailed', failureReason = '') {
   await db.runTransaction(async transaction => {
     const res = await transaction.collection('orders').where({ id }).limit(1).get()
     if (!res.data.length) return
@@ -1031,8 +1057,16 @@ async function rollbackPendingPaymentOrder(id, reason = 'paymentFailed') {
         })
       }
     }
+    const paymentFailureReason = String(failureReason || '').slice(0, 120)
     await transaction.collection('orders').doc(order._id).update({
-      data: { status: 'cancelled', payStatus: reason, deliveryStatus: 'cancelled', cancelledAt: timestamp, updatedAt: timestamp }
+      data: {
+        status: 'cancelled',
+        payStatus: reason,
+        deliveryStatus: 'cancelled',
+        cancelledAt: timestamp,
+        updatedAt: timestamp,
+        ...(paymentFailureReason ? { paymentFailureReason } : {})
+      }
     })
   })
 }
@@ -1189,6 +1223,42 @@ async function updateOrder(id, body) {
   if (body.items) updateData.items = JSON.stringify(body.items)
   for (const d of docs) await db.collection('orders').doc(d._id).update({ data: updateData })
   return await getOrder(id)
+}
+
+function normalizeOrderAddressInput(address = {}) {
+  const receiver = String(address.receiver || '').trim().slice(0, 20)
+  const phone = String(address.phone || address.fullPhone || '').replace(/[^\d]/g, '').slice(0, 11)
+  const detail = String(address.address || address.detail || '').trim().slice(0, 120)
+  const note = String(address.note || '').trim().slice(0, 80)
+  const tag = String(address.tag || '').trim().slice(0, 12)
+  if (!receiver) throw businessError('INVALID_ADDRESS', '请填写收货人')
+  if (!/^1\d{10}$/.test(phone)) throw businessError('INVALID_ADDRESS', '请填写正确手机号')
+  if (detail.length < 6) throw businessError('INVALID_ADDRESS', '请填写详细地址')
+  return { receiver, phone, fullPhone: phone, address: detail, detail, note, tag }
+}
+
+async function updateOrderAddress(body = {}, authToken = '') {
+  const auth = await requireUserSession(authToken)
+  const id = String(body.id || body.orderId || '').trim()
+  if (!id) throw businessError('ORDER_NOT_FOUND', '订单不存在')
+  const { data: docs } = await db.collection('orders').where({ id }).limit(1).get()
+  const order = docs && docs[0]
+  if (!order) throw businessError('ORDER_NOT_FOUND', '订单不存在')
+  if (!canAccessOrder(auth, order)) throw businessError('PERMISSION_DENIED', '无权操作该订单')
+  const status = order.status || ''
+  const deliveryStatus = order.deliveryStatus || ''
+  if (!['pendingPayment', 'paid', 'pendingDelivery'].includes(status) || ['delivering', 'completed', 'cancelled'].includes(deliveryStatus)) {
+    throw businessError('ORDER_ADDRESS_LOCKED', '订单已进入配送流程，不能修改地址')
+  }
+  const address = normalizeOrderAddressInput(body.address || body)
+  await db.collection('orders').doc(order._id).update({
+    data: {
+      address: JSON.stringify(address),
+      addressUpdatedAt: now(),
+      updatedAt: now()
+    }
+  })
+  return getOrder(id, authToken)
 }
 
 async function updateOrderStatus(id, status, authToken = '') {
@@ -1648,7 +1718,7 @@ async function statsToday() {
     .where({ createdAt: db.command.gte(today) }).limit(1000).get()
 
   const orderCount = orders.length
-  const totalAmount = orders.reduce((s, o) => s + Number(o.payable || o.amount || 0), 0)
+  const totalAmount = sumRevenue(orders)
   const pendingCount = orders.filter(o => o.status === 'pendingDelivery' || o.status === 'paid').length
 
   const { data: products } = await db.collection('products').where({ status: 'active' }).get()
@@ -2086,6 +2156,7 @@ exports.main = async (event, context) => {
       case 'getOrder': return { ok: true, data: await getOrder(payload.id, authToken) }
       case 'createOrder': return { ok: true, data: await createOrder(payload, authToken) }
       case 'updateOrder': await requireAdminSession(authToken); return { ok: true, data: await updateOrder(payload.id, payload) }
+      case 'updateOrderAddress': return { ok: true, data: await updateOrderAddress(payload, authToken) }
       case 'updateOrderStatus': return { ok: true, data: await updateOrderStatus(payload.id, payload.status, authToken) }
       case 'syncPaymentStatus': return { ok: true, data: await syncPaymentStatus(payload.id, authToken) }
       case 'cancelPendingPaymentOrder': return { ok: true, data: await cancelPendingPaymentOrder(payload, authToken) }

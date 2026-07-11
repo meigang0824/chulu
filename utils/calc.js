@@ -3,7 +3,8 @@ export function calcOrderAmount(items = [], deliveryFee = 0, discount = 0, minim
   const baseDeliveryFee = Number(deliveryFee || 0)
   const minimumAmount = Number(minimumOrderAmount || 0)
   const discountAmount = Number(discount || 0)
-  const finalDeliveryFee = minimumAmount > 0 ? 0 : baseDeliveryFee
+  const freeShipping = minimumAmount > 0 && productAmount >= minimumAmount
+  const finalDeliveryFee = freeShipping ? 0 : baseDeliveryFee
   const payable = Math.max(0, productAmount + finalDeliveryFee - discountAmount)
   return {
     productAmount: Number(productAmount.toFixed(2)),

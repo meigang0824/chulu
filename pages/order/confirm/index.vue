@@ -59,9 +59,9 @@
     <view class="bottom-pay">
       <view class="bottom-pay__amount">
         <view>实付款：<text>￥{{ money(amount.payable) }}</text></view>
-        <view>{{ addressReady ? `已优惠 ￥${money(amount.discount)}` : '请先选择收货地址' }}</view>
+        <view>{{ addressReady ? payAmountHint : '请先选择收货地址' }}</view>
       </view>
-      <button :class="{ 'is-disabled': !addressReady || !orderAmountReady }" @tap="pay">{{ payButtonText }}</button>
+      <button :class="{ 'is-disabled': !addressReady }" @tap="pay">{{ payButtonText }}</button>
     </view>
   </view>
 </template>
@@ -125,17 +125,20 @@ export default {
       return Number(this.checkout.minimumOrderAmount || this.checkout.freeShippingAmount || 0)
     },
     orderAmountReady() {
-      return !this.minimumOrderAmount || Number(this.amount.productAmount || 0) >= this.minimumOrderAmount
+      return Number(this.amount.productAmount || 0) > 0
     },
     minimumOrderTip() {
       if (!this.minimumOrderAmount) return ''
-      if (this.orderAmountReady) return `已满 ￥${this.money(this.minimumOrderAmount)}，可统一配送`
-      return `满 ￥${this.money(this.minimumOrderAmount)} 起统一配送，还差 ￥${this.money(this.amount.minimumOrderMissing)}`
+      if (Number(this.amount.productAmount || 0) >= this.minimumOrderAmount) return `已满 ￥${this.money(this.minimumOrderAmount)}，免配送费`
+      return `满 ￥${this.money(this.minimumOrderAmount)} 免配送费，还差 ￥${this.money(this.amount.minimumOrderMissing)}；未满加配送费 ￥${this.money(this.amount.baseDeliveryFee)}`
     },
     payButtonText() {
       if (!this.addressReady) return '选择地址后下单'
-      if (!this.orderAmountReady) return `满￥${this.money(this.minimumOrderAmount)}起统一配送`
       return this.checkoutText.payText
+    },
+    payAmountHint() {
+      if (Number(this.amount.deliveryFee || 0) > 0) return `含配送费 ￥${this.money(this.amount.deliveryFee)}`
+      return Number(this.amount.discount || 0) > 0 ? `已优惠 ￥${this.money(this.amount.discount)}` : '已免配送费'
     }
   },
   async onLoad(query) {
@@ -250,10 +253,6 @@ export default {
       this.normalizeCount()
       if (!this.address || !this.address.receiver || !this.address.address) {
         uni.showToast({ title: '请选择收货地址', icon: 'none' })
-        return
-      }
-      if (!this.orderAmountReady) {
-        uni.showToast({ title: `满￥${this.money(this.minimumOrderAmount)}起统一配送`, icon: 'none' })
         return
       }
       try {

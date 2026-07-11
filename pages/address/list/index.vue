@@ -44,6 +44,7 @@ import { showCloudError } from '@/utils/apiError'
 import { ensurePageAccess } from '@/utils/auth'
 
 const SELECTED_ADDRESS_KEY = 'buyer_selected_address'
+const SELECTED_ORDER_ADDRESS_KEY = 'buyer_order_edit_address'
 
 export default {
   components: { CustomNavBar, AddressCard },
@@ -51,6 +52,8 @@ export default {
     return {
       addresses: [],
       selectMode: false,
+      selectTarget: 'checkout',
+      orderId: '',
       selectedId: ''
     }
   },
@@ -65,6 +68,8 @@ export default {
   onLoad(query) {
     if (!ensurePageAccess('/pages/address/list/index', '收货地址需要登录后使用')) return
     this.selectMode = String(query.select || '') === '1'
+    this.selectTarget = query.target || 'checkout'
+    this.orderId = query.orderId || ''
   },
   onShow() {
     if (!ensurePageAccess('/pages/address/list/index', '收货地址需要登录后使用')) return
@@ -87,6 +92,11 @@ export default {
     },
     handleSelect(item) {
       if (!this.selectMode) return
+      if (this.selectTarget === 'order') {
+        uni.setStorageSync(SELECTED_ORDER_ADDRESS_KEY, { orderId: this.orderId, address: item })
+        uni.navigateBack()
+        return
+      }
       uni.setStorageSync(SELECTED_ADDRESS_KEY, item)
       uni.navigateBack()
     },

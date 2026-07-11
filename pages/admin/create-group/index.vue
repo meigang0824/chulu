@@ -43,11 +43,23 @@
       <view v-if="!selectedCount" class="selected-empty">还没有选择商品，先从下方商品池补充本场团商品。</view>
       <scroll-view v-else scroll-x class="selected-scroll" show-scrollbar="false">
         <view class="selected-list">
-          <view v-for="item in selectedItems" :key="item.id" class="selected-item">
+          <view v-for="(item, index) in selectedItems" :key="item.id" class="selected-item">
+            <view class="selected-item__remove" @tap.stop="removeProduct(item.id)">×</view>
             <image :src="item.image" mode="aspectFill" />
             <view class="selected-item__name">{{ item.name }}</view>
             <view class="selected-item__meta">￥{{ money(item.groupPrice) }} · {{ item.groupStock }}份</view>
-            <view class="selected-item__remove" @tap="removeProduct(item.id)">移除</view>
+            <view class="selected-item__actions">
+              <view
+                class="selected-item__order"
+                :class="{ disabled: index === 0 }"
+                @tap.stop="moveSelected(index, -1)"
+              >上移</view>
+              <view
+                class="selected-item__order"
+                :class="{ disabled: index === selectedItems.length - 1 }"
+                @tap.stop="moveSelected(index, 1)"
+              >下移</view>
+            </view>
           </view>
         </view>
       </scroll-view>
@@ -271,6 +283,15 @@ export default {
     removeProduct(id) {
       this.selectedItems = this.selectedItems.filter(item => item.id !== id)
     },
+    moveSelected(index, offset) {
+      const nextIndex = index + offset
+      if (nextIndex < 0 || nextIndex >= this.selectedItems.length) return
+      const items = this.selectedItems.slice()
+      const current = items[index]
+      items.splice(index, 1)
+      items.splice(nextIndex, 0, current)
+      this.selectedItems = items
+    },
     selectRecommended() {
       if (!this.filteredProducts.length) return
       uni.showModal({
@@ -481,11 +502,14 @@ export default {
 .selected-empty { margin-top:18rpx; padding:24rpx; color:$color-text-light; background:$color-bg-light; border:1rpx dashed $color-border-light; border-radius:$radius-card; font-size:25rpx; line-height:1.4; text-align:center; }
 .selected-scroll { margin-top:20rpx; white-space:nowrap; }
 .selected-list { display:inline-flex; gap:16rpx; }
-.selected-item { width:190rpx; padding:14rpx; background:$color-bg-light; border:1rpx solid $color-border-light; border-radius:$radius-card; }
+.selected-item { position:relative; width:190rpx; padding:14rpx; background:$color-bg-light; border:1rpx solid $color-border-light; border-radius:$radius-card; }
 .selected-item image { width:100%; height:120rpx; border-radius:$radius-sm; }
 .selected-item__name { margin-top:10rpx; color:$color-text-main; font-size:24rpx; font-weight:700; @include text-ellipsis; }
 .selected-item__meta { margin-top:6rpx; color:$color-text-light; font-size:22rpx; @include text-ellipsis; }
-.selected-item__remove { margin-top:10rpx; color:$color-primary; font-size:22rpx; font-weight:700; }
+.selected-item__actions { display:grid; grid-template-columns:1fr 1fr; gap:8rpx; margin-top:10rpx; }
+.selected-item__order { display:flex; align-items:center; justify-content:center; min-width:0; height:42rpx; color:$color-primary; background:#fff; border:1rpx solid rgba(255,92,114,.18); border-radius:$radius-pill; font-size:21rpx; font-weight:700; line-height:1; }
+.selected-item__order.disabled { color:$color-text-placeholder; background:$color-bg-deep; border-color:$color-border-light; }
+.selected-item__remove { position:absolute; right:6rpx; top:6rpx; z-index:2; display:flex; align-items:center; justify-content:center; width:38rpx; height:38rpx; color:#fff; background:rgba(75,36,23,.58); border:1rpx solid rgba(255,255,255,.68); border-radius:50%; font-size:28rpx; font-weight:700; line-height:1; box-shadow:0 4rpx 10rpx rgba(75,36,23,.18); }
 .state-card { margin-top:22rpx; padding:42rpx 24rpx; text-align:center; color:$color-text-light; background:$color-bg-light; border-radius:$radius-card; font-size:26rpx; }
 .pool-list { display:flex; flex-direction:column; gap:16rpx; margin-top:22rpx; }
 .pool-item { position:relative; display:flex; gap:18rpx; padding:16rpx; border:1rpx solid $color-border-light; border-radius:$radius-card; background:#fff; }
